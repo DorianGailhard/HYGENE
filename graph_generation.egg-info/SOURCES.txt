@@ -1,0 +1,7 @@
+LICENSE
+README.md
+setup.py
+graph_generation.egg-info/PKG-INFO
+graph_generation.egg-info/SOURCES.txt
+graph_generation.egg-info/dependency_links.txt
+graph_generation.egg-info/top_level.txt

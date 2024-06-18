@@ -1,0 +1,6 @@
+name: hypergraphErdosRenyi
+min_size: 32
+max_size: 32
+probs: - 0.1 - 0.001
+k: 3
+load: false
