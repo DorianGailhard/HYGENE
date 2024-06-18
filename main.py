@@ -5,7 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import hydra
-import networkx as nx
+import hypernetx as hnx
 import numpy as np
 import torch as th
 import torch.multiprocessing as mp
@@ -13,10 +13,10 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch_geometric.data import Batch
 
-import graph_generation as gg
+import hypergraph_generation as gg
 
 
-def get_expansion_items(cfg: DictConfig, train_graphs):
+def get_expansion_items(cfg: DictConfig, train_hypergraphs):
     # Spectral Features
     spectrum_extractor = (
         gg.spectral.SpectrumExtractor(
@@ -42,14 +42,14 @@ def get_expansion_items(cfg: DictConfig, train_graphs):
 
     if cfg.reduction.num_red_seqs > 0:
         train_dataset = gg.data.FiniteRandRedDataset(
-            adjs=[nx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_graphs],
+            adjs=[hnx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_hypergraphs],
             red_factory=red_factory,
             spectrum_extractor=spectrum_extractor,
             num_red_seqs=cfg.reduction.num_red_seqs,
         )
     else:
         train_dataset = gg.data.InfiniteRandRedDataset(
-            adjs=[nx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_graphs],
+            adjs=[hnx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_hypergraphs],
             red_factory=red_factory,
             spectrum_extractor=spectrum_extractor,
         )
@@ -106,7 +106,7 @@ def get_expansion_items(cfg: DictConfig, train_graphs):
 
     # Diffusion
     if cfg.diffusion.name == "discrete":
-        diffusion = gg.diffusion.sparse.DiscreteGraphDiffusion(
+        diffusion = gg.diffusion.sparse.DiscretehypergraphDiffusion(
             self_conditioning=cfg.diffusion.self_conditioning,
             num_steps=cfg.diffusion.num_steps,
         )
@@ -138,52 +138,6 @@ def get_expansion_items(cfg: DictConfig, train_graphs):
         "sign_net": sign_net,
     }
 
-
-def get_one_shot_items(cfg: DictConfig, train_graphs):
-    # Train Dataset
-    train_dataset = gg.data.DenseGraphDataset(
-        adjs=[nx.to_numpy_array(G, dtype=bool) for G in train_graphs]
-    )
-
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=cfg.training.batch_size,
-        shuffle=False,
-        pin_memory=True,
-    )
-
-    # Model
-    features = 2 if cfg.diffusion.name == "discrete" else 1
-    model = gg.model.PPGN(
-        in_features=features * (1 + cfg.diffusion.self_conditioning),
-        out_features=features,
-        emb_features=cfg.model.emb_features,
-        hidden_features=cfg.model.hidden_features,
-        ppgn_features=cfg.model.ppgn_features,
-        num_layers=cfg.model.num_layers,
-        dropout=cfg.model.dropout,
-    )
-
-    # Diffusion
-    if cfg.diffusion.name == "discrete":
-        diffusion = gg.diffusion.dense.DiscreteGraphDiffusion(
-            self_conditioning=cfg.diffusion.self_conditioning,
-            num_steps=cfg.diffusion.num_steps,
-        )
-    elif cfg.diffusion.name == "edm":
-        diffusion = gg.diffusion.dense.EDM(
-            self_conditioning=cfg.diffusion.self_conditioning,
-            num_steps=cfg.diffusion.num_steps,
-        )
-    else:
-        raise ValueError(f"Unknown diffusion name: {cfg.diffusion.name}")
-
-    # Method
-    method = gg.method.OneShot(diffusion=diffusion)
-
-    return {"train_dataloader": train_dataloader, "method": method, "model": model}
-
-
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     if cfg.debugging:
@@ -194,113 +148,33 @@ def main(cfg: DictConfig):
     np.random.seed(0)
     th.manual_seed(0)
        
-    # Graphs
+    # hypergraphs
     if cfg.dataset.load:
         with open(Path("./data") / f"{cfg.dataset.name}.pkl", "rb") as f:
             dataset = pickle.load(f)
 
-        train_graphs = dataset["train"]
-        validation_graphs = dataset["val"]
-        test_graphs = dataset["test"]
-
-    elif cfg.dataset.name in ["planar", "tree"]:
-        graph_generator = (
-            gg.data.generate_planar_graphs
-            if cfg.dataset.name == "planar"
-            else gg.data.generate_tree_graphs
-        )
-
-        train_graphs = graph_generator(
-            num_graphs=cfg.dataset.train_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            seed=0,
-        )
-        validation_graphs = graph_generator(
-            num_graphs=cfg.dataset.val_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            seed=1,
-        )
-        test_graphs = graph_generator(
-            num_graphs=cfg.dataset.test_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            seed=2,
-        )
-
-    elif cfg.dataset.name == "sbm":
-        train_graphs = gg.data.generate_sbm_graphs(
-            num_graphs=cfg.dataset.train_size,
-            min_num_communities=cfg.dataset.min_num_communities,
-            max_num_communities=cfg.dataset.max_num_communities,
-            min_community_size=cfg.dataset.min_community_size,
-            max_community_size=cfg.dataset.max_community_size,
-            seed=0,
-        )
-        validation_graphs = gg.data.generate_sbm_graphs(
-            num_graphs=cfg.dataset.val_size,
-            min_num_communities=cfg.dataset.min_num_communities,
-            max_num_communities=cfg.dataset.max_num_communities,
-            min_community_size=cfg.dataset.min_community_size,
-            max_community_size=cfg.dataset.max_community_size,
-            seed=1,
-        )
-        test_graphs = gg.data.generate_sbm_graphs(
-            num_graphs=cfg.dataset.test_size,
-            min_num_communities=cfg.dataset.min_num_communities,
-            max_num_communities=cfg.dataset.max_num_communities,
-            min_community_size=cfg.dataset.min_community_size,
-            max_community_size=cfg.dataset.max_community_size,
-            seed=2,
-        )
-    elif cfg.dataset.name == "hypergraphSBM":
-        train_graphs = gg.data.generate_sbm_hypergraphs(
-            num_graphs=cfg.dataset.train_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            p=cfg.dataset.p,
-            q=cfg.dataset.q,
-            k=cfg.dataset.k,
-            seed=0,
-        )
-        validation_graphs = gg.data.generate_sbm_hypergraphs(
-            num_graphs=cfg.dataset.val_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            p=cfg.dataset.p,
-            q=cfg.dataset.q,
-            k=cfg.dataset.k,
-            seed=0,
-        )
-        test_graphs = gg.data.generate_sbm_hypergraphs(
-            num_graphs=cfg.dataset.test_size,
-            min_size=cfg.dataset.min_size,
-            max_size=cfg.dataset.max_size,
-            p=cfg.dataset.p,
-            q=cfg.dataset.q,
-            k=cfg.dataset.k,
-            seed=0,
-        )
+        train_hypergraphs = dataset["train"]
+        validation_hypergraphs = dataset["val"]
+        test_hypergraphs = dataset["test"]
     elif cfg.dataset.name == "hypergraphErdosRenyi":
-        train_graphs = gg.data.generate_erdos_renyi_hypergraphs(
-            num_graphs=cfg.dataset.train_size,
+        train_hypergraphs = gg.data.generate_erdos_renyi_hypergraphs(
+            num_hypergraphs=cfg.dataset.train_size,
             min_size=cfg.dataset.min_size,
             max_size=cfg.dataset.max_size,
             probs=cfg.dataset.probs,
             k=cfg.dataset.k,
             seed=0,
         )
-        validation_graphs = gg.data.generate_erdos_renyi_hypergraphs(
-            num_graphs=cfg.dataset.val_size,
+        validation_hypergraphs = gg.data.generate_erdos_renyi_hypergraphs(
+            num_hypergraphs=cfg.dataset.val_size,
             min_size=cfg.dataset.min_size,
             max_size=cfg.dataset.max_size,
             probs=cfg.dataset.probs,
             k=cfg.dataset.k,
             seed=1,
         )
-        test_graphs = gg.data.generate_erdos_renyi_hypergraphs(
-            num_graphs=cfg.dataset.test_size,
+        test_hypergraphs = gg.data.generate_erdos_renyi_hypergraphs(
+            num_hypergraphs=cfg.dataset.test_size,
             min_size=cfg.dataset.min_size,
             max_size=cfg.dataset.max_size,
             probs=cfg.dataset.probs,
@@ -311,11 +185,6 @@ def main(cfg: DictConfig):
     else:
         raise ValueError(f"Unknown dataset name: {cfg.dataset.name}")
 
-    # keep only largest connected component for train graphs
-    train_graphs = [
-        G.subgraph(max(nx.connected_components(G), key=len)) for G in train_graphs
-    ]
-
     # Metrics
     validation_metrics = [
         gg.metrics.NodeNumDiff(),
@@ -325,39 +194,20 @@ def main(cfg: DictConfig):
         gg.metrics.Spectral(),
         gg.metrics.Wavelet(),
         gg.metrics.Ratio(),
-        # gg.metrics.Uniqueness(),
-        # gg.metrics.Novelty(),
+        gg.metrics.Uniqueness(),
+        gg.metrics.Novelty(),
     ]
 
-    if "planar" in cfg.dataset.name:
+    if "hypergraphSBM" in cfg.dataset.name:
         validation_metrics += [
-            gg.metrics.ValidPlanar(),
-            gg.metrics.UniqueNovelValidPlanar(),
-        ]
-    elif "tree" in cfg.dataset.name:
-        validation_metrics += [
-            gg.metrics.ValidTree(),
-            gg.metrics.UniqueNovelValidTree(),
-        ]
-    elif "sbm" in cfg.dataset.name:
-        validation_metrics += [
-            gg.metrics.ValidSBM(),
-            gg.metrics.UniqueNovelValidSBM(),
-        ]
-    elif "hypergraphSBM" in cfg.dataset.name:
-        validation_metrics += [
-            gg.metrics.ValidBipartite(),
         ]
     elif "hypergraphErdosRenyi" in cfg.dataset.name:
         validation_metrics += [
-            gg.metrics.ValidBipartite(),
         ]
 
     # Method
     if cfg.method.name == "expansion":
-        method_items = get_expansion_items(cfg, train_graphs)
-    elif cfg.method.name == "one_shot":
-        method_items = get_one_shot_items(cfg, train_graphs)
+        method_items = get_expansion_items(cfg, train_hypergraphs)
     else:
         raise ValueError(f"Unknown method name: {cfg.method.name}")
     method_items = defaultdict(lambda: None, method_items)
@@ -369,9 +219,9 @@ def main(cfg: DictConfig):
         model=method_items["model"],
         method=method_items["method"],
         train_dataloader=method_items["train_dataloader"],
-        train_graphs=train_graphs,
-        validation_graphs=validation_graphs,
-        test_graphs=test_graphs,
+        train_hypergraphs=train_hypergraphs,
+        validation_hypergraphs=validation_hypergraphs,
+        test_hypergraphs=test_hypergraphs,
         metrics=validation_metrics,
         cfg=cfg,
     )

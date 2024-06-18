@@ -1,4 +1,3 @@
-import networkx as nx
 import hypernetx as hnx
 import torch as th
 from torch.nn import Module
@@ -10,7 +9,7 @@ from .method import Method
 
 
 class Expansion(Method):
-    """Graph generation method generating graphs by local expansion."""
+    """Hypergraph generation method generating graphs by local expansion."""
 
     def __init__(
         self,
@@ -34,18 +33,18 @@ class Expansion(Method):
         self.max_red_frac = max_red_frac
         self.red_threshold = red_threshold
 
-    def sample_graphs(self, target_size, model: Module, sign_net: Module):
-        """Samples a batch of graphs."""
-        num_graphs = len(target_size)
+    def sample_hypergraphs(self, target_size, model: Module, sign_net: Module):
+        """Samples a batch of hypergraphs."""
+        num_hypergraphs = len(target_size)
         
-        dense_tensor = th.zeros(num_graphs*2, num_graphs*2, device=self.device)
-        dense_tensor[th.arange(num_graphs, device=self.device)*2, 1 + th.arange(num_graphs, device=self.device)*2] = 1
-        dense_tensor[1 + th.arange(num_graphs, device=self.device)*2, th.arange(num_graphs, device=self.device)*2] = 1
+        dense_tensor = th.zeros(num_hypergraphs*2, num_hypergraphs*2, device=self.device)
+        dense_tensor[th.arange(num_hypergraphs, device=self.device)*2, 1 + th.arange(num_hypergraphs, device=self.device)*2] = 1
+        dense_tensor[1 + th.arange(num_hypergraphs, device=self.device)*2, th.arange(num_hypergraphs, device=self.device)*2] = 1
         adj = SparseTensor.from_dense(dense_tensor)
 
-        batch = th.repeat_interleave(th.arange(0, num_graphs, device=self.device), 2*th.ones(num_graphs, dtype = th.int32, device=self.device))
-        node_expansion = th.ones(num_graphs*2, dtype=th.long, device=self.device)
-        node_type = th.ones(num_graphs*2, dtype=th.int, device=self.device)
+        batch = th.repeat_interleave(th.arange(0, num_hypergraphs, device=self.device), 2*th.ones(num_hypergraphs, dtype = th.int32, device=self.device))
+        node_expansion = th.ones(num_hypergraphs*2, dtype=th.long, device=self.device)
+        node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
 
         while adj.size(0) < target_size.sum():
@@ -61,19 +60,20 @@ class Expansion(Method):
             if node_expansion.max() <= 1:
                 break
 
-        # return graphs
+        # return hypergraphs
         adjs, num_nodes = unbatch_adj(adj, batch, node_type)
-        graphs = []
+        hypergraphs = []
         
         for (adj, num_node) in zip(adjs, num_nodes):
             # remind that we have :
             # Adj_bipartite = ( 0  H)
             #                 (H^T 0)
-            G = nx.from_scipy_sparse_array(adj.to_scipy(layout="coo").astype(bool))
-            G.graph["num_nodes"] = num_node
-            graphs.append(G)
+            num_hyperedges = adj.shape[0] - num_node
+            incidence_matrix = adj[:num_nodes, num_nodes:num_nodes + num_hyperedges]
+            H = hnx.Hypergraph.from_incidence_matrix(incidence_matrix)
+            hypergraphs.append(H)
         
-        return graphs
+        return hypergraphs
 
     @th.no_grad()
     def expand(
@@ -86,7 +86,7 @@ class Expansion(Method):
         model: Module,
         sign_net: Module,
     ):
-        """Expands a graph by a single level."""
+        """Expands a hypergraph by a single level."""
         reduced_size = scatter(th.ones_like(batch_reduced), batch_reduced)
 
         # get node embeddings
@@ -110,7 +110,7 @@ class Expansion(Method):
             )
 
         # expand
-        # don't expand graphs reached their target size
+        # don't expand hypergraphs reached their target size
         node_expansion[(reduced_size >= target_size)[batch_reduced]] = 1
         node_map = th.repeat_interleave(
             th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
@@ -124,10 +124,10 @@ class Expansion(Method):
             col=node_map,
             value=th.ones(node_map.size(0), device=self.device),
         )
-        adj_augmented = self.get_augmented_graph(adj_reduced, expansion_matrix)
+        adj_augmented = self.get_augmented_hypergraph(adj_reduced, expansion_matrix)
         augmented_edge_index = th.stack(adj_augmented.coo()[:2], dim=0)
 
-        # compute number of nodes in expanded graph
+        # compute number of nodes in expanded hypergraph
         random_reduction_fraction = (
             th.rand(len(target_size), device=self.device)
             * (self.max_red_frac - self.min_red_frac)
@@ -183,7 +183,7 @@ class Expansion(Method):
         else:
             node_attr = (node_pred > 0.5).long()
 
-        # construct new graph
+        # construct new hypergraph
         adj = SparseTensor.from_edge_index(
             augmented_edge_index[:, augmented_edge_pred > 0.5],
             sparse_sizes=adj_augmented.sizes(),
@@ -193,8 +193,8 @@ class Expansion(Method):
 
     def get_loss(self, batch, model: Module, sign_net: Module):
         """Returns a weighted sum of the node expansion loss and the augmented edge loss."""
-        # get augmented graph
-        adj_augmented = self.get_augmented_graph(
+        # get augmented hypergraph
+        adj_augmented = self.get_augmented_hypergraph(
             batch.adj_reduced, batch.expansion_matrix
         )
 
@@ -245,7 +245,7 @@ class Expansion(Method):
             "loss": loss.item(),
         }
 
-    def get_augmented_graph(self, adj_reduced, expansion_matrix):
+    def get_augmented_hypergraph(self, adj_reduced, expansion_matrix):
         """Returns the expanded adjacency matrix with additional augmented edges.
 
         All edge weights are set to 1.
@@ -290,7 +290,7 @@ class Expansion(Method):
 
 def unbatch_adj(adj, batch, node_type) -> tuple:
     size = scatter(th.ones_like(batch), batch)
-    graph_end_idx = size.cumsum(0)
-    graph_start_idx = graph_end_idx - size
-    return [ adj[graph_start_idx[i] : graph_end_idx[i], :][:, graph_start_idx[i] : graph_end_idx[i] ]
-    for i in range(len(size)) ], [th.sum(node_type[graph_start_idx[i] : graph_end_idx[i]] > 0).item() for i in range(len(size))]
+    hypergraph_end_idx = size.cumsum(0)
+    hypergraph_start_idx = hypergraph_end_idx - size
+    return [ adj[hypergraph_start_idx[i] : hypergraph_end_idx[i], :][:, hypergraph_start_idx[i] : hypergraph_end_idx[i] ]
+    for i in range(len(size)) ], [th.sum(node_type[hypergraph_start_idx[i] : hypergraph_end_idx[i]]).item() for i in range(len(size))]

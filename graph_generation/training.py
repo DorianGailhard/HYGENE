@@ -3,7 +3,6 @@ from pathlib import Path
 from time import time
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import hypernetx as hnx
 import numpy as np
 import torch as th
@@ -25,16 +24,16 @@ class Trainer:
         model,
         method,
         train_dataloader,
-        train_graphs: list[nx.Graph],
-        validation_graphs: list[nx.Graph],
-        test_graphs: list[nx.Graph],
+        train_hypergraphs: list[hnx.Hypergraph],
+        validation_hypergraphs: list[hnx.Hypergraph],
+        test_hypergraphs: list[hnx.Hypergraph],
         metrics: list[Metric],
         cfg,
     ):
         self.train_iterator = iter(train_dataloader)
-        self.train_graphs = train_graphs
-        self.validation_graphs = validation_graphs
-        self.test_graphs = test_graphs
+        self.train_hypergraphs = train_hypergraphs
+        self.validation_hypergraphs = validation_hypergraphs
+        self.test_hypergraphs = test_hypergraphs
         self.metrics = metrics
         self.cfg = cfg
 
@@ -180,7 +179,7 @@ class Trainer:
         # Test for all EMA beta values
         test_results = {}
         for beta in self.cfg.ema.betas:
-            test_results[f"ema_{beta}"] = self.evaluate(self.test_graphs, beta)
+            test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)
 
         # Log results
         self.log({"test": test_results})
@@ -215,7 +214,7 @@ class Trainer:
         val_results = {}
         test_results = {}
         for beta in self.cfg.ema.betas:
-            val_results[f"ema_{beta}"] = self.evaluate(self.validation_graphs, beta)
+            val_results[f"ema_{beta}"] = self.evaluate(self.validation_hypergraphs, beta)
 
             # Compute validation score
             unique_novel_valid_keys = [
@@ -231,7 +230,7 @@ class Trainer:
             # Evaluate on test set if validation score improved
             if validation_score >= self.best_validation_scores[beta]:
                 self.best_validation_scores[beta] = validation_score
-                test_results[f"ema_{beta}"] = self.evaluate(self.test_graphs, beta)
+                test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)
 
         # Log results
         self.log({"validation": val_results, "test": test_results})
@@ -249,16 +248,16 @@ class Trainer:
                     pickle.dump(test_results, f)
 
     @th.no_grad()
-    def evaluate(self, eval_graphs: list[nx.Graph], beta):
-        """Evaluate model for given beta on given graphs."""
+    def evaluate(self, eval_hypergraphs: list[hnx.Hypergraph], beta):
+        """Evaluate model for given beta on given hypergraphs."""
         model = self.ema_models[beta]
         sign_net = self.ema_sign_nets[beta]
 
         # Shuffle prediction order to make size distribution more uniform
-        pred_perm = self.rng.permutation(np.arange(len(eval_graphs)))
+        pred_perm = self.rng.permutation(np.arange(len(eval_hypergraphs)))
 
         # Select target number of nodes and split into batches
-        target_size = np.array([len(g) for g in eval_graphs])[pred_perm]
+        target_size = np.array([len(g) for g in eval_hypergraphs])[pred_perm]
         bs = (
             self.cfg.validation.batch_size
             if self.cfg.validation.batch_size is not None
@@ -268,43 +267,43 @@ class Trainer:
 
         results = {}
 
-        # Generate graphs
-        pred_graphs = []
+        # Generate hypergraphs
+        pred_hypergraphs = []
         for batch in batches:
-            pred_graphs += self.method.sample_graphs(
+            pred_hypergraphs += self.method.sample_hypergraphs(
                 target_size=th.tensor(batch, device=self.device),
                 model=model,
                 sign_net=sign_net,
             )
-        results["pred_graphs"] = [pred_graphs[i] for i in pred_perm]
+        results["pred_hypergraphs"] = [pred_hypergraphs[i] for i in pred_perm]
         if self.device == "cuda":
             th.cuda.empty_cache()
 
-        # Validate graphs
+        # Validate hypergraphs
         for metric in self.metrics:
             results[str(metric)] = metric(
-                reference_graphs=eval_graphs,
-                predicted_graphs=pred_graphs,
-                train_graphs=self.train_graphs,
+                reference_hypergraphs=eval_hypergraphs,
+                pred_hypergraphs=pred_hypergraphs,
+                train_hypergraphs=self.train_hypergraphs,
             )
 
-        if self.cfg.validation.per_graph_size:
+        if self.cfg.validation.per_hypergraph_size:
             for n in set(target_size):
-                eval_graphs_n = [g for g in eval_graphs if len(g) == n]
-                pred_graphs_n = [g for g in pred_graphs if len(g) == n]
+                eval_hypergraphs_n = [g for g in eval_hypergraphs if len(g) == n]
+                pred_hypergraphs_n = [g for g in pred_hypergraphs if len(g) == n]
                 results[f"size_{n}"] = {}
                 for metric in self.metrics:
                     results[f"size_{n}"][str(metric)] = metric(
-                        reference_graphs=eval_graphs_n,
-                        predicted_graphs=pred_graphs_n,
-                        train_graphs=self.train_graphs,
+                        reference_hypergraphs=eval_hypergraphs_n,
+                        predicted_hypergraphs=pred_hypergraphs_n,
+                        train_hypergraphs=self.train_hypergraphs,
                     )
 
         # Sample plots
-        n = min(4, len(self.validation_graphs)) // 2
+        n = min(4, len(self.validation_hypergraphs)) // 2
         fig, axs = plt.subplots(n, 2, figsize=(50, 50))
         for i in range(n * n):
-            H = pred_graphs[i]
+            H = pred_hypergraphs[i]
             ax = axs[i // n, i % n]
             hnx.drawing.rubber_band.draw(H)
             ax.title.set_text(f"N = {len(H)}")
