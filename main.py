@@ -13,7 +13,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch_geometric.data import Batch
 
-import hypergraph_generation as gg
+import graph_generation as gg
 
 
 def get_expansion_items(cfg: DictConfig, train_hypergraphs):
@@ -188,14 +188,7 @@ def main(cfg: DictConfig):
     # Metrics
     validation_metrics = [
         gg.metrics.NodeNumDiff(),
-        gg.metrics.NodeDegree(),
-        gg.metrics.ClusteringCoefficient(),
-        gg.metrics.OrbitCount(),
-        gg.metrics.Spectral(),
-        gg.metrics.Wavelet(),
-        gg.metrics.Ratio(),
-        gg.metrics.Uniqueness(),
-        gg.metrics.Novelty(),
+        gg.metrics.DegreeDistrWasserstein(),
     ]
 
     if "hypergraphSBM" in cfg.dataset.name:
