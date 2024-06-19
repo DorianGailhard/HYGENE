@@ -8,6 +8,12 @@ import numpy as np
 from collections import Counter
 from scipy.spatial.distance import wasserstein_distance
 
+from util.eval_helper import (
+    spectral_stats,
+    eval_fraction_unique,
+    eval_fraction_isomorphic,
+)
+
 @dataclass
 class Metric(ABC):
     @abstractmethod
@@ -65,4 +71,31 @@ class DegreeDistrWasserstein(Metric):
             np.array(degree_dist2_keys),
             np.array(degree_dist1_values),
             np.array(degree_dist2_values)
+        )
+    
+
+class Spectral(Metric):
+    # Eigenvalues of normalized Laplacian
+    def __str__(self):
+        return "Spectral"
+
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
+        return spectral_stats(reference_hypergraphs, predicted_hypergraphs)
+    
+
+class Uniqueness(Metric):
+    def __str__(self):
+        return "Uniqueness"
+
+    def __call__(self, reference_graphs, predicted_graphs, train_graphs):
+        return eval_fraction_unique(predicted_graphs, precise=True)
+
+
+class Novelty(Metric):
+    def __str__(self):
+        return "Novelty"
+
+    def __call__(self, reference_graphs, predicted_graphs, train_graphs):
+        return 1 - eval_fraction_isomorphic(
+            fake_graphs=predicted_graphs, train_graphs=train_graphs
         )

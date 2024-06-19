@@ -189,6 +189,7 @@ def main(cfg: DictConfig):
     validation_metrics = [
         gg.metrics.NodeNumDiff(),
         gg.metrics.DegreeDistrWasserstein(),
+        gg.metrics.Spectral(),
     ]
 
     if "hypergraphSBM" in cfg.dataset.name:
