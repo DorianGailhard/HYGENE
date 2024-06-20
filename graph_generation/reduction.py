@@ -40,12 +40,12 @@ class Reduction(ABC):
         self.node_expansion = (
             np.ones(self.n, dtype=np.int32)
             if expansion_matrix is None
-            else expansion_matrix.sum(0)[0, :self.n].astype(np.int32)
+            else expansion_matrix.sum(0)[:self.n].astype(np.int32)
         )
         self.edge_expansion = (
             np.ones(self.n, dtype=np.int32)
             if expansion_matrix is None
-            else expansion_matrix.sum(0)[0, self.n:].astype(np.int32)
+            else expansion_matrix.sum(0)[self.n:].astype(np.int32)
         )
         self.level = level
 
@@ -87,7 +87,7 @@ class Reduction(ABC):
         zero_nodes = csr_array((num_nodes, num_nodes))
         zero_hyperedges = csr_array((num_hyperedges, num_hyperedges))
         
-        top = hstack([zero_nodes, incidence_matrix])
+        top = hstack([zero_nodes, collapsed_coarsened_incidence])
         bottom = hstack([collapsed_coarsened_incidence.T, zero_hyperedges])
         bipartite_adjacency = csr_array(vstack([top, bottom]))
         
@@ -247,7 +247,7 @@ class Reduction(ABC):
             return np.inf
 
         ones = np.ones(nc)
-        W = self.adj[nodes, :][:, nodes]
+        W = self.clique_adj[nodes, :][:, nodes]
         L = np.diag(2 * self.node_degree[nodes] - W @ ones) - W
         B = (np.eye(nc) - np.outer(ones, ones) / nc) @ self.A[nodes, :]
         return np.linalg.norm(B.T @ L @ B) / (nc - 1)
@@ -258,7 +258,7 @@ class NeighborhoodReduction(Reduction):
 
     def get_contraction_sets(self) -> Sequence[NDArray]:
         """Returns neighborhood contraction sets"""
-        adj_with_self_loops = self.adj.copy().tolil()
+        adj_with_self_loops = self.clique_adj.copy().tolil()
         adj_with_self_loops.setdiag(1)
         return [np.array(nbrs) for nbrs in adj_with_self_loops.rows]
 
@@ -270,13 +270,13 @@ class EdgeReduction(Reduction):
     """
 
     def get_contraction_sets(self) -> Sequence[NDArray]:
-        us, vs, _ = sp.sparse.find(sp.sparse.triu(self.adj))
+        us, vs, _ = sp.sparse.find(sp.sparse.triu(self.clique_adj))
         return np.stack([us, vs], axis=1)
 
     def get_local_variation_cost(self, edge: NDArray) -> real:
         """Compute the local variation cost for an edge"""
         u, v = edge
-        w = self.adj[u, v]
+        w = self.clique_adj[u, v]
         L = np.array(
             [[2 * self.node_degree[u] - w, -w], [-w, 2 * self.node_degree[v] - w]]
         )

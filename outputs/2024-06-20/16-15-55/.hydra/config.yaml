@@ -1,0 +1,62 @@
+dataset:
+  train_size: 160
+  val_size: 32
+  test_size: 40
+  name: hypergraphSBM
+  load: true
+diffusion:
+  self_conditioning: true
+  num_steps: 256
+  name: edm
+reduction:
+  contraction_family: edges
+  cost_type: local_variation
+  preserved_eig_size: 8
+  sqrt_partition_size: true
+  weighted_reduction: true
+  min_red_frac: 0.1
+  max_red_frac: 0.3
+  red_threshold: 16
+  num_red_seqs: -1
+  rand_lambda: 0.3
+spectral:
+  num_features: 2
+  normalized_laplacian: true
+training:
+  batch_size: 32
+  lr: 0.0001
+  num_steps: -1
+  max_num_workers: 10
+  log_interval: 100
+  save_checkpoint: true
+  resume: false
+validation:
+  batch_size: 32
+  interval: 100000
+  first_step: 100000
+  per_graph_size: false
+testing: false
+model:
+  name: ppgn
+  emb_features: 32
+  hidden_features: 256
+  ppgn_features: 128
+  num_layers: 15
+  dropout: 0.1
+sign_net:
+  hidden_features: 128
+  num_layers: 5
+ema:
+  betas:
+  - 0.99
+  gamma: 1
+  power: 0.67
+name: hypergraphSBM
+debugging: false
+wandb:
+  logging: false
+method:
+  name: expansion
+  augmented_radius: 2
+  augmented_dropout: 0.5
+  deterministic_expansion: true

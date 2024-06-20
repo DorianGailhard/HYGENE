@@ -152,10 +152,9 @@ class Expansion(Method):
         )
 
         # make predictions
-        node_pred, augmented_edge_pred = self.diffusion.sample(
+        node_pred, edge_node_pred, augmented_edge_pred = self.diffusion.sample(
             edge_index=augmented_edge_index,
             batch=batch,
-            num_nodes=batch.n,
             num_nodes=size,
             model=model,
             model_kwargs={
@@ -185,7 +184,7 @@ class Expansion(Method):
                 node_attr[new_node_idx] = 1
         else:
             node_attr = (node_pred > 0.5).long()
-
+            
         # construct new hypergraph
         adj = SparseTensor.from_edge_index(
             augmented_edge_index[:, augmented_edge_pred > 0.5],

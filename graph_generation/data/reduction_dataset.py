@@ -18,27 +18,27 @@ class RandRedDataset(IterableDataset, ABC):
         self.hypergraphs = hypergraphs
         self.spectrum_extractor = spectrum_extractor
 
-    def get_random_reduction_sequence(self, hypergraph, rng):
+    def get_random_reduction_sequence(self, red, rng):
         data = []
         while True:
-            reduced_hypergraph = hypergraph.get_reduced_hypergraph(rng)
+            reduced_hypergraph = red.get_reduced_hypergraph(rng)
             data.append(
                 ReducedGraphData(
-                    target_size=hypergraph.n,
-                    reduction_level=hypergraph.level,
-                    adj=hypergraph.clique_adj.astype(bool).astype(np.float32),
-                    node_expansion=hypergraph.node_expansion,
-                    edge_expansion=hypergraph.edge_expansion,
+                    target_size=red.n,
+                    reduction_level=red.level,
+                    adj=red.clique_adj.astype(bool).astype(np.float32),
+                    node_expansion=red.node_expansion,
+                    edge_expansion=red.edge_expansion,
                     adj_reduced=reduced_hypergraph.clique_adj.astype(bool).astype(np.float32),
                     expansion_matrix=reduced_hypergraph.expansion_matrix,
-                    spectral_features_reduced=self.spectrum_extractor(reduced_hypergraph.adj)
+                    spectral_features_reduced=self.spectrum_extractor(reduced_hypergraph.bipartite_adj)
                     if self.spectrum_extractor is not None
                     else None,
                 )
             )
-            if hypergraph.n <= 1:
+            if red.n <= 1:
                 break
-            hypergraph = reduced_hypergraph
+            red = reduced_hypergraph
 
         return data
 
@@ -53,10 +53,10 @@ class FiniteRandRedDataset(RandRedDataset):
         self.rng = np.random.default_rng(seed=0)
         self.hypergraphs_reduced_data = {i: [] for i in range(len(hypergraphs))}
         for i, hypergraph in enumerate(hypergraphs):
-            hypergraph = red_factory(hypergraph)
+            red = red_factory(hypergraph)
             for _ in range(num_red_seqs):
                 self.hypergraph_reduced_data[i] += self.get_random_reduction_sequence(
-                    hypergraph, self.rng
+                    red, self.rng
                 )
 
     def __iter__(self):
@@ -78,6 +78,8 @@ class FiniteRandRedDataset(RandRedDataset):
 
 class InfiniteRandRedDataset(RandRedDataset):
     def __iter__(self):
+        reds = [self.red_factory(hypergraph) for hypergraph in self.hypergraphs]
+        
         # get process id
         worker_info = th.utils.data.get_worker_info()
         worker_id = worker_info.id if worker_info is not None else 0
@@ -86,7 +88,7 @@ class InfiniteRandRedDataset(RandRedDataset):
         # initialize graph_reduced_data
         hypergraph_reduced_data = {
             i: self.get_random_reduction_sequence(hypergraph, rng)
-            for i, hypergraph in enumerate(self.hypergraphs)
+            for i, hypergraph in enumerate(reds)
         }
 
         # yield random reduced graph data
@@ -94,7 +96,7 @@ class InfiniteRandRedDataset(RandRedDataset):
             i = rng.integers(len(self.hypergraphs))
             if len(hypergraph_reduced_data[i]) == 0:
                 hypergraph_reduced_data[i] = self.get_random_reduction_sequence(
-                    self.hypergraphs[i], rng
+                    reds[i], rng
                 )
                 rng.shuffle(hypergraph_reduced_data[i])
 

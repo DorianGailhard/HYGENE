@@ -6,7 +6,7 @@ import hypernetx as hnx
 import numpy as np
 
 from collections import Counter
-from scipy.spatial.distance import wasserstein_distance
+from scipy.stats import wasserstein_distance
 
 from util.eval_helper import (
     spectral_stats,
@@ -23,9 +23,9 @@ class Metric(ABC):
     @abstractmethod
     def __call__(
         self,
-        reference_hypergraphs: list[hnx.Hyperhypergraph],
-        predicted_hypergraphs: list[hnx.Hyperhypergraph],
-        train_hypergraphs: list[hnx.Hyperhypergraph],
+        reference_hypergraphs: list[hnx.Hypergraph],
+        predicted_hypergraphs: list[hnx.Hypergraph],
+        train_hypergraphs: list[hnx.Hypergraph],
     ) -> float:
         pass
 

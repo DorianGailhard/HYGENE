@@ -11,7 +11,7 @@ class Method(ABC):
         self.diffusion = diffusion
 
     @abstractmethod
-    def sample_graphs(self, target_size: th.Tensor, model: Module, sign_net: Module):
+    def sample_hypergraphs(self, target_size: th.Tensor, model: Module, sign_net: Module):
         pass
 
     @abstractmethod

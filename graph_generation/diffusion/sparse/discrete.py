@@ -85,7 +85,6 @@ class DiscreteGraphDiffusionModel(Module):
                     node_attr_self_cond = th.softmax(node_attr_self_cond, dim=-1)
                     edge_node_attr_self_cond = th.softmax(edge_node_attr_self_cond, dim=-1)
                     edge_attr_self_cond = th.softmax(edge_attr_self_cond, dim=-1)
-
             else:
                 node_attr_self_cond = th.zeros_like(node_attr_in)
                 edge_node_attr_self_cond = th.zeros_like(edge_node_attr_in)
