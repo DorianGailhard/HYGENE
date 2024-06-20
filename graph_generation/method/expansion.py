@@ -192,7 +192,7 @@ class Expansion(Method):
         return adj, batch, node_attr + 1, expanded_node_type
 
     def get_loss(self, batch, model: Module, sign_net: Module):
-        """Returns a weighted sum of the node expansion loss and the augmented edge loss."""
+        """Returns a weighted sum of the node and edge expansion loss and the augmented edge loss."""
         # get augmented hypergraph
         adj_augmented = self.get_augmented_hypergraph(
             batch.adj_reduced, batch.expansion_matrix
@@ -200,6 +200,7 @@ class Expansion(Method):
 
         # construct labels
         node_attr = batch.node_expansion - 1
+        edge_node_attr = batch.edge_expansion - 1
         augmented_edge_index, edge_val = to_edge_index(adj_augmented + batch.adj)
         augmented_edge_attr = edge_val.long() - 1
 

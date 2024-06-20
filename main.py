@@ -42,14 +42,14 @@ def get_expansion_items(cfg: DictConfig, train_hypergraphs):
 
     if cfg.reduction.num_red_seqs > 0:
         train_dataset = gg.data.FiniteRandRedDataset(
-            adjs=[hnx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_hypergraphs],
+            hypergraphs=train_hypergraphs,
             red_factory=red_factory,
             spectrum_extractor=spectrum_extractor,
             num_red_seqs=cfg.reduction.num_red_seqs,
         )
     else:
         train_dataset = gg.data.InfiniteRandRedDataset(
-            adjs=[hnx.to_scipy_sparse_array(G, dtype=np.float64) for G in train_hypergraphs],
+            hypergraphs=train_hypergraphs,
             red_factory=red_factory,
             spectrum_extractor=spectrum_extractor,
         )
