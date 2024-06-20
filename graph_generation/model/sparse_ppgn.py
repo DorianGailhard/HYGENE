@@ -30,6 +30,7 @@ class SparsePPGN(Module):
 
         # Embedding layers
         self.node_emb_layer = Linear(node_in_features, emb_features)
+        self.edge_node_emb_layer = Linear(node_in_features, emb_features)
         self.edge_emb_layer = Linear(edge_in_features, emb_features)
         self.noise_cond_emb_layer = Linear(1, emb_features)
         self.red_frac_emb_layer = Linear(1, emb_features)
@@ -37,6 +38,7 @@ class SparsePPGN(Module):
 
         # In layers
         self.node_in_mlp = MLP(5 * emb_features, [hidden_features, hidden_features])
+        self.edge_node_in_mlp = MLP(5 * emb_features, [hidden_features, hidden_features])
         self.edge_in_mlp = MLP(6 * emb_features, [hidden_features, hidden_features])
 
         # GNN layers
@@ -46,6 +48,9 @@ class SparsePPGN(Module):
 
         # Out layers
         self.node_out_layer = Linear(
+            (num_layers + 1) * hidden_features, node_out_features
+        )
+        self.edge_node_out_layer = Linear(
             (num_layers + 1) * hidden_features, node_out_features
         )
         self.edge_out_layer = Linear(
@@ -59,15 +64,19 @@ class SparsePPGN(Module):
         self,
         edge_index,
         batch,
+        num_nodes,
         node_attr,
+        edge_node_attr,
         edge_attr,
         node_emb,
+        edge_node_emb,
         noise_cond,
         red_frac,
         target_size,
     ):
         # Embedding
         node_attr_emb = self.node_emb_layer(node_attr)
+        edge_node_attr_emb = self.edge_node_emb_layer(edge_node_attr)
         edge_attr_emb = self.edge_emb_layer(edge_attr)
         noise_cond_emb = self.noise_cond_emb_layer(noise_cond[..., None])
         red_frac_emb = self.red_frac_emb_layer(red_frac[..., None])
@@ -86,6 +95,19 @@ class SparsePPGN(Module):
         )
         x_node = self.dropout(x_node)
         x_node = self.node_in_mlp(x_node)
+        
+        x_edge_node = th.cat(
+            [
+                edge_node_attr_emb,
+                edge_node_emb,
+                noise_cond_emb[batch],
+                red_frac_emb[batch],
+                target_size_emb[batch],
+            ],
+            dim=-1,
+        )
+        x_edge_node = self.dropout(x_edge_node)
+        x_edge_node = self.edge_node_in_mlp(x_edge_node)
 
         edge_batch = batch[edge_index[0]]
         x_edge = th.cat(
@@ -111,9 +133,9 @@ class SparsePPGN(Module):
             None, :
         ].expand(2, -1)
         edge_index_ext = th.cat([self_loop_index, edge_index], dim=1)
-        x = th.cat([x_node, x_edge], dim=0)
+        x = th.cat([x_node, x_edge_node, x_edge], dim=0)
 
-        n = node_attr.size(0)
+        n = node_attr.size(0) + edge_node_attr.size(0)
         edge_id = edge_index_ext[0] * n + edge_index_ext[1]
         edge_id_to_edge_num = th.full((n * n,), -1, dtype=th.long, device=x.device)
         edge_id_to_edge_num[edge_id] = th.arange(edge_id.size(0), device=x.device)
@@ -161,7 +183,8 @@ class SparsePPGN(Module):
         x = self.dropout(x)
 
         # Out layers
-        out_node = self.node_out_layer(x[:n])
+        out_node = self.node_out_layer(x[:node_attr.size(0)])
+        out_edge_node = self.node_out_layer(x[node_attr.size(0):n])
         out_edge = self.edge_out_layer(x[n:])
 
         # make out_edge symmetric
@@ -171,7 +194,7 @@ class SparsePPGN(Module):
             reduce="mean",
         )[1]
 
-        return out_node, out_edge
+        return out_node, out_edge_node, out_edge
 
 
 class SparsePPGNLayer(Module):

@@ -21,15 +21,15 @@ class RandRedDataset(IterableDataset, ABC):
     def get_random_reduction_sequence(self, hypergraph, rng):
         data = []
         while True:
-            reduced_hypergraph = hypergraph.get_reduced_graph(rng)
+            reduced_hypergraph = hypergraph.get_reduced_hypergraph(rng)
             data.append(
                 ReducedGraphData(
                     target_size=hypergraph.n,
                     reduction_level=hypergraph.level,
-                    adj=hypergraph.adj.astype(bool).astype(np.float32),
+                    adj=hypergraph.clique_adj.astype(bool).astype(np.float32),
                     node_expansion=hypergraph.node_expansion,
                     edge_expansion=hypergraph.edge_expansion,
-                    adj_reduced=reduced_hypergraph.adj.astype(bool).astype(np.float32),
+                    adj_reduced=reduced_hypergraph.clique_adj.astype(bool).astype(np.float32),
                     expansion_matrix=reduced_hypergraph.expansion_matrix,
                     spectral_features_reduced=self.spectrum_extractor(reduced_hypergraph.adj)
                     if self.spectrum_extractor is not None

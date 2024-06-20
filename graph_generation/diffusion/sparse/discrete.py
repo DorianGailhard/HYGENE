@@ -9,11 +9,12 @@ class DiscreteGraphDiffusionModel(Module):
     """Preconditioning for discrete diffusion with optional self-conditioning"""
 
     def __init__(
-        self, self_conditioning, num_node_categories, num_edge_categories, num_steps
+        self, self_conditioning, num_node_categories, num_edge_node_categories, num_edge_categories, num_steps
     ):
         super().__init__()
         self.self_conditioning = self_conditioning
         self.num_node_categories = num_node_categories
+        self.num_edge_node_categories = num_edge_node_categories
         self.num_edge_categories = num_edge_categories
         self.num_steps = num_steps
 
@@ -21,24 +22,30 @@ class DiscreteGraphDiffusionModel(Module):
         self,
         edge_index,
         batch,
+        num_nodes,
         node_attr,
+        edge_node_attr,
         edge_attr,
         t,
         model,
         model_kwargs,
         node_attr_self_cond=None,
+        edge_node_attr_self_cond=None,
         edge_attr_self_cond=None,
     ):
         # embed node and edge attributes
         node_attr_in = F.one_hot(node_attr, self.num_node_categories).float() * 2 - 1
+        edge_node_attr_in = F.one_hot(node_attr, self.num_edge_node_categories).float() * 2 - 1
         edge_attr_in = F.one_hot(edge_attr, self.num_edge_categories).float() * 2 - 1
 
         # self-conditioning
         if self.self_conditioning:
             if not model.training:
                 assert node_attr_self_cond is not None
+                assert edge_node_attr_self_cond is not None
                 assert edge_attr_self_cond is not None
                 node_attr_self_cond = th.softmax(node_attr_self_cond, dim=-1)
+                edge_node_attr_self_cond = th.softmax(edge_node_attr_self_cond, dim=-1)
                 edge_attr_self_cond = th.softmax(edge_attr_self_cond, dim=-1)
             elif np.random.rand() < 0.5:
                 # sample from next time step
@@ -46,11 +53,15 @@ class DiscreteGraphDiffusionModel(Module):
 
                 # compute self-conditioning
                 with th.no_grad():
-                    node_attr_self_cond, edge_attr_self_cond = model(
+                    node_attr_self_cond, edge_node_attr_self_cond, edge_attr_self_cond = model(
                         edge_index=edge_index,
                         batch=batch,
+                        num_nodes=num_nodes,
                         node_attr=th.cat(
                             [node_attr_in, th.zeros_like(node_attr_in)], dim=-1
+                        ),
+                        edge_node_attr=th.cat(
+                            [edge_node_attr_in, th.zeros_like(edge_node_attr_in)], dim=-1
                         ),
                         edge_attr=th.cat(
                             [edge_attr_in, th.zeros_like(edge_attr_in)], dim=-1
@@ -63,33 +74,42 @@ class DiscreteGraphDiffusionModel(Module):
                         node_attr_self_cond.detach()
                         + F.one_hot(node_attr, self.num_node_categories).float()
                     )
+                    edge_node_attr_self_cond = (
+                        edge_node_attr_self_cond.detach()
+                        + F.one_hot(edge_node_attr, self.num_edge_node_categories).float()
+                    )
                     edge_attr_self_cond = (
                         edge_attr_self_cond.detach()
                         + F.one_hot(edge_attr, self.num_edge_categories).float()
                     )
                     node_attr_self_cond = th.softmax(node_attr_self_cond, dim=-1)
+                    edge_node_attr_self_cond = th.softmax(edge_node_attr_self_cond, dim=-1)
                     edge_attr_self_cond = th.softmax(edge_attr_self_cond, dim=-1)
 
             else:
                 node_attr_self_cond = th.zeros_like(node_attr_in)
+                edge_node_attr_self_cond = th.zeros_like(edge_node_attr_in)
                 edge_attr_self_cond = th.zeros_like(edge_attr_in)
 
             # concatenate with input
             node_attr_in = th.cat([node_attr_in, node_attr_self_cond], dim=-1)
+            edge_node_attr_in = th.cat([edge_node_attr_in, edge_node_attr_self_cond], dim=-1)
             edge_attr_in = th.cat([edge_attr_in, edge_attr_self_cond], dim=-1)
 
         # predict node and edge attributes
-        node_pred, edge_pred = model(
+        node_pred, edge_node_pred, edge_pred = model(
             edge_index=edge_index,
             batch=batch,
             node_attr=node_attr_in,
+            edge_node_attr=edge_node_attr_in,
             edge_attr=edge_attr_in,
             **dict(model_kwargs, noise_cond=t.float() / self.num_steps),
         )
         node_pred = node_pred + F.one_hot(node_attr, self.num_node_categories).float()
+        edge_node_pred = edge_node_pred + F.one_hot(edge_node_attr, self.num_edge_node_categories).float()
         edge_pred = edge_pred + F.one_hot(edge_attr, self.num_edge_categories).float()
 
-        return node_pred, edge_pred
+        return node_pred, edge_node_pred, edge_pred
 
 
 class DiscreteGraphDiffusion:
@@ -101,6 +121,7 @@ class DiscreteGraphDiffusion:
         )
         self.num_steps = num_steps
         self.node_diffusion = CategoricalDiffusion(2, num_steps)
+        self.edge_node_diffusion = CategoricalDiffusion(3, num_steps)
         self.edge_diffusion = CategoricalDiffusion(2, num_steps)
 
     @property
@@ -112,17 +133,19 @@ class DiscreteGraphDiffusion:
         self._device = device
         self.model_wrapper.to(device)
         self.node_diffusion.to(device)
+        self.edge_node_diffusion.to(device)
         self.edge_diffusion.to(device)
         return self
 
     @th.no_grad()
-    def sample(self, edge_index, batch, model, model_kwargs):
+    def sample(self, edge_index, batch, num_nodes, model, model_kwargs):
         """Generate samples using the model.
 
         Iteratively sample from p(x_{t-1} | x_t) for t = T-1, ..., 0, starting from x_T ~ p(x_T).
         """
         # sample from p(x_T)
-        node_attr_t = sample_categorical(self.node_diffusion.qT, batch.size(0))
+        node_attr_t = sample_categorical(self.node_diffusion.qT, num_nodes.sum())
+        edge_node_attr_t = sample_categorical(self.edge_node_diffusion.qT, batch.size(0) - num_nodes.sum())
         edge_triu_mask = edge_index[0] < edge_index[1]
         edge_triu_index = edge_index[:, edge_triu_mask]
         edge_attr_t = sample_categorical(
@@ -130,7 +153,8 @@ class DiscreteGraphDiffusion:
         )
         edge_attr_t = to_undirected(edge_triu_index, edge_attr_t)[1]
 
-        node_pred = th.zeros(batch.size(0), 2, device=self.device)
+        node_pred = th.zeros(num_nodes.sum(), 2, device=self.device)
+        edge_node_pred = th.zeros(batch.size(0) - num_nodes.sum(), 3, device=self.device)
         edge_pred = th.zeros(edge_index.size(1), 2, device=self.device)
 
         bs = batch.max().item() + 1
@@ -143,6 +167,7 @@ class DiscreteGraphDiffusion:
                 edge_index=edge_index,
                 batch=batch,
                 node_attr=node_attr_t,
+                edge_node_attr=edge_node_attr_t,
                 edge_attr=edge_attr_t,
                 t=t,
                 model=model,
@@ -153,7 +178,11 @@ class DiscreteGraphDiffusion:
 
             # sample ancestor node and edge attributes
             node_attr_t = self.node_diffusion.q_reverse_sample(
-                node_attr_t, node_pred, batch, t
+                node_attr_t, node_attr_t, node_pred, batch, t
+            )
+            
+            edge_node_attr_t = self.edge_node_diffusion.q_reverse_sample(
+                edge_node_attr_t, edge_node_attr_t, edge_node_pred, batch, t
             )
 
             edge_attr_t = self.edge_diffusion.q_reverse_sample(
@@ -166,10 +195,11 @@ class DiscreteGraphDiffusion:
 
         # return probabilities for positive class
         node_out = F.softmax(node_pred, dim=-1)[:, 1]
+        edge_node_out = F.softmax(edge_node_pred, dim=-1)[:, 1]
         edge_out = F.softmax(edge_pred, dim=-1)[:, 1]
-        return node_out, edge_out
+        return node_out, edge_node_out, edge_out
 
-    def get_loss(self, edge_index, batch, node_attr, edge_attr, model, model_kwargs):
+    def get_loss(self, edge_index, batch, num_nodes, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
         """Compute loss to train the model.
 
         Sample x_pred ~ p(x_t, t), where t ~ U(0, T-1) and x_t ~ q(x_t | x),
@@ -178,6 +208,7 @@ class DiscreteGraphDiffusion:
         # sample noisy augmented node and edge attributes
         t = th.randint(0, self.num_steps, (batch.max().item() + 1,), device=self.device)
         node_attr_t = self.node_diffusion.q_sample(node_attr, batch, t)
+        edge_node_attr_t = self.edge_node_diffusion.q_sample(edge_node_attr, batch, t)
         edge_triu_mask = edge_index[0] < edge_index[1]
         edge_triu_index = edge_index[:, edge_triu_mask]
         edge_triu_attr = edge_attr[edge_triu_mask]
@@ -189,10 +220,12 @@ class DiscreteGraphDiffusion:
         assert (new_edge_index == edge_index).all()
 
         # predict
-        node_pred, edge_pred = self.model_wrapper(
+        node_pred, edge_node_pred, edge_pred = self.model_wrapper(
             edge_index=edge_index,
             batch=batch,
+            num_nodes=num_nodes,
             node_attr=node_attr_t,
+            edge_node_attr=edge_node_attr_t,
             edge_attr=edge_attr_t,
             t=t,
             model=model,
@@ -201,9 +234,10 @@ class DiscreteGraphDiffusion:
 
         # compute loss
         node_loss = self.node_diffusion.get_loss(node_attr, node_pred)
+        edge_node_loss = self.edge_node_diffusion.get_loss(edge_node_attr, edge_node_pred)
         edge_loss = self.edge_diffusion.get_loss(edge_attr, edge_pred)
 
-        return node_loss, edge_loss
+        return node_loss, edge_node_loss, edge_loss
 
 
 class CategoricalDiffusion(Module):

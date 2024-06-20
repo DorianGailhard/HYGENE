@@ -47,7 +47,7 @@ class Expansion(Method):
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
 
-        while adj.size(0) < target_size.sum():
+        while node_type.sum() < target_size.sum():
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
                 batch,
@@ -87,7 +87,7 @@ class Expansion(Method):
         sign_net: Module,
     ):
         """Expands a hypergraph by a single level."""
-        reduced_size = scatter(th.ones_like(batch_reduced), batch_reduced)
+        reduced_size = scatter(node_type, batch_reduced)
 
         # get node embeddings
         if self.spectrum_extractor is not None:
@@ -101,11 +101,11 @@ class Expansion(Method):
                     for adj in unbatch_adj(adj_reduced, batch_reduced, node_type)[0]
                 ]
             )
-            node_emb_reduced = sign_net(
+            both_type_node_emb_reduced = sign_net(
                 spectral_features=spectral_features, edge_index=adj_reduced
             )
         else:
-            node_emb_reduced = th.randn(
+            both_type_node_emb_reduced = th.randn(
                 adj_reduced.size(0), self.emb_features, device=self.device
             )
 
@@ -116,9 +116,9 @@ class Expansion(Method):
             th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
         )
         expanded_node_type = th.repeat_interleave(node_type, node_expansion)
-        node_emb = node_emb_reduced[node_map]
+        both_type_node_emb = both_type_node_emb_reduced[node_map]
         batch = batch_reduced[node_map]
-        size = scatter(th.ones_like(batch), batch)
+        size = scatter(node_type, batch)
         expansion_matrix = SparseTensor(
             row=th.arange(node_map.size(0), device=self.device),
             col=node_map,
@@ -155,9 +155,12 @@ class Expansion(Method):
         node_pred, augmented_edge_pred = self.diffusion.sample(
             edge_index=augmented_edge_index,
             batch=batch,
+            num_nodes=batch.n,
+            num_nodes=size,
             model=model,
             model_kwargs={
-                "node_emb": node_emb,
+                "node_emb": both_type_node_emb[node_type == 1],
+                "edge_node_emb": both_type_node_emb[node_type == 0],
                 "red_frac": 1 - size / expanded_size,
                 "target_size": target_size.float(),
             },
@@ -206,13 +209,13 @@ class Expansion(Method):
 
         # get node embeddings
         if sign_net is not None:
-            node_emb_reduced = sign_net(
+            both_type_node_emb_reduced = sign_net(
                 spectral_features=batch.spectral_features_reduced,
                 edge_index=batch.adj_reduced,
             )
-            node_emb = batch.expansion_matrix @ node_emb_reduced
+            both_type_node_emb = batch.expansion_matrix @ both_type_node_emb_reduced
         else:
-            node_emb = th.randn(
+            both_type_node_emb = th.randn(
                 adj_augmented.size(0), self.emb_features, device=self.device
             )
 
@@ -222,14 +225,25 @@ class Expansion(Method):
         red_frac = 1 - size / expanded_size
 
         # loss
+        # Create node_type
+        node_type = th.zeros_like(batch.batch)
+
+        for i in th.unique(batch.batch):
+            count = batch.n[i].item()
+            indices = (batch == i).nonzero(as_tuple=True)[0]
+            node_type[indices[:count]] = 1
+        
         node_loss, edge_loss = self.diffusion.get_loss(
             edge_index=augmented_edge_index,
             batch=batch.batch,
+            num_nodes=batch.n,
             node_attr=node_attr,
+            edge_node_attr=edge_node_attr,
             edge_attr=augmented_edge_attr,
             model=model,
             model_kwargs={
-                "node_emb": node_emb,
+                "node_emb": both_type_node_emb[node_type == 1],
+                "edge_node_emb": both_type_node_emb[node_type == 0],
                 "red_frac": red_frac,
                 "target_size": batch.target_size.float(),
             },

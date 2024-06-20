@@ -5,7 +5,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import hydra
-import hypernetx as hnx
 import numpy as np
 import torch as th
 import torch.multiprocessing as mp
