@@ -25,11 +25,12 @@ class RandRedDataset(IterableDataset, ABC):
             data.append(
                 ReducedGraphData(
                     target_size=red.n,
+                    original_size=reduced_hypergraph.n,
                     reduction_level=red.level,
                     adj=red.clique_adj.astype(bool).astype(np.float32),
                     node_expansion=red.node_expansion,
                     edge_expansion=red.edge_expansion,
-                    adj_reduced=reduced_hypergraph.clique_adj.astype(bool).astype(np.float32),
+                    adj_reduced=reduced_hypergraph.bipartite_adj.astype(bool).astype(np.float32),
                     expansion_matrix=reduced_hypergraph.expansion_matrix,
                     spectral_features_reduced=self.spectrum_extractor(reduced_hypergraph.bipartite_adj)
                     if self.spectrum_extractor is not None
@@ -55,22 +56,22 @@ class FiniteRandRedDataset(RandRedDataset):
         for i, hypergraph in enumerate(hypergraphs):
             red = red_factory(hypergraph)
             for _ in range(num_red_seqs):
-                self.hypergraph_reduced_data[i] += self.get_random_reduction_sequence(
+                self.hypergraphs_reduced_data[i] += self.get_random_reduction_sequence(
                     red, self.rng
                 )
 
     def __iter__(self):
         while True:
             i = self.rng.integers(len(self.hypergraphs))
-            j = self.rng.integers(len(self.hypergraph_reduced_data[i]))
-            yield self.hypergraph_reduced_data[i][j]
+            j = self.rng.integers(len(self.hypergraphs_reduced_data[i]))
+            yield self.hypergraphs_reduced_data[i][j]
 
     @property
     def max_node_expansion(self):
         return max(
             [
                 rgd.node_expansion.max().item()
-                for seq in self.hypergraph_reduced_data
+                for seq in self.hypergraphs_reduced_data
                 for rgd in seq
             ]
         )
@@ -86,7 +87,7 @@ class InfiniteRandRedDataset(RandRedDataset):
         rng = np.random.default_rng(worker_id)
 
         # initialize graph_reduced_data
-        hypergraph_reduced_data = {
+        hypergraphs_reduced_data = {
             i: self.get_random_reduction_sequence(hypergraph, rng)
             for i, hypergraph in enumerate(reds)
         }
@@ -94,13 +95,13 @@ class InfiniteRandRedDataset(RandRedDataset):
         # yield random reduced graph data
         while True:
             i = rng.integers(len(self.hypergraphs))
-            if len(hypergraph_reduced_data[i]) == 0:
-                hypergraph_reduced_data[i] = self.get_random_reduction_sequence(
+            if len(hypergraphs_reduced_data[i]) == 0:
+                hypergraphs_reduced_data[i] = self.get_random_reduction_sequence(
                     reds[i], rng
                 )
-                rng.shuffle(hypergraph_reduced_data[i])
+                rng.shuffle(hypergraphs_reduced_data[i])
 
-            yield hypergraph_reduced_data[i].pop()
+            yield hypergraphs_reduced_data[i].pop()
 
     @property
     def max_node_expansion(self):

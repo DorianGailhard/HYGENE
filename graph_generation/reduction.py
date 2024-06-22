@@ -27,7 +27,7 @@ class Reduction(ABC):
         self.bipartite_adj = bipartite_adj
         self.clique_adj = clique_adj
         self.n = self.clique_adj.shape[0]
-        self.node_degree = np.sum(self.bipartite_adj [:self.n, self.n:], axis=1)
+        self.node_degree = self.clique_adj.sum(0)
         self.lap = sp.sparse.diags(self.node_degree) - self.clique_adj if lap is None else lap
         if B is None:
             self.B = self.get_B0()
@@ -217,7 +217,7 @@ class Reduction(ABC):
                 marked[contraction_set] = True
                 if marked.sum() - len(partitions) >= reduction_fraction * self.n:
                     break
-
+        
         # construct projection matrix
         P = eye(self.n, format="lil")
         mask = np.ones(self.n, dtype=bool)
@@ -314,6 +314,12 @@ class ReductionFactory:
         
         # Compute the adjacency matrix of the weighted clique expansion
         clique_adjacency = incidence_matrix @ D_E_inv @ incidence_matrix.T
+        
+        # Subtract the diagonal
+        diagonal = clique_adjacency.diagonal()
+        diag_matrix = sp.sparse.diags(diagonal, offsets=0, shape=clique_adjacency.shape, format='csr')
+
+        clique_adjacency = clique_adjacency - diag_matrix
 
         return csr_array(clique_adjacency)
     

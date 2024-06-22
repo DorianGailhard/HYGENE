@@ -155,7 +155,7 @@ class Expansion(Method):
         node_pred, edge_node_pred, augmented_edge_pred = self.diffusion.sample(
             edge_index=augmented_edge_index,
             batch=batch,
-            num_nodes=size,
+            node_type=node_type,
             model=model,
             model_kwargs={
                 "node_emb": both_type_node_emb[node_type == 1],
@@ -196,6 +196,8 @@ class Expansion(Method):
     def get_loss(self, batch, model: Module, sign_net: Module):
         """Returns a weighted sum of the node and edge expansion loss and the augmented edge loss."""
         # get augmented hypergraph
+        print("iteration")
+        
         adj_augmented = self.get_augmented_hypergraph(
             batch.adj_reduced, batch.expansion_matrix
         )
@@ -212,10 +214,23 @@ class Expansion(Method):
                 spectral_features=batch.spectral_features_reduced,
                 edge_index=batch.adj_reduced,
             )
-            both_type_node_emb = batch.expansion_matrix @ both_type_node_emb_reduced
+            
+            # Create node_type
+            node_type = th.zeros(batch.adj_reduced.size(0))
+
+            for i in th.unique(batch.batch):
+                count = batch.original_size[i]
+                indices = (batch.batch == i).nonzero(as_tuple=True)[0]
+                node_type[indices[:count]] = 1
+                
+            node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 1], batch.expansion_matrix.sum(0)[node_type == 1].to(th.int), dim=0)
+            edge_node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 0], batch.expansion_matrix.sum(0)[node_type == 0].to(th.int), dim=0) 
         else:
-            both_type_node_emb = th.randn(
-                adj_augmented.size(0), self.emb_features, device=self.device
+            node_emb = th.randn(
+                batch.target_size.sum(), self.emb_features, device=self.device
+            )
+            edge_node_emb = th.randn(
+                adj_augmented.size(0) - batch.target_size.sum(), self.emb_features, device=self.device
             )
 
         # reduction fraction
@@ -224,25 +239,18 @@ class Expansion(Method):
         red_frac = 1 - size / expanded_size
 
         # loss
-        # Create node_type
-        node_type = th.zeros_like(batch.batch)
-
-        for i in th.unique(batch.batch):
-            count = batch.n[i].item()
-            indices = (batch == i).nonzero(as_tuple=True)[0]
-            node_type[indices[:count]] = 1
-        
+        print("diffusion loss")
         node_loss, edge_loss = self.diffusion.get_loss(
             edge_index=augmented_edge_index,
             batch=batch.batch,
-            num_nodes=batch.n,
+            node_type=node_type,
             node_attr=node_attr,
             edge_node_attr=edge_node_attr,
             edge_attr=augmented_edge_attr,
             model=model,
             model_kwargs={
-                "node_emb": both_type_node_emb[node_type == 1],
-                "edge_node_emb": both_type_node_emb[node_type == 0],
+                "node_emb": node_emb,
+                "edge_node_emb": edge_node_emb,
                 "red_frac": red_frac,
                 "target_size": batch.target_size.float(),
             },

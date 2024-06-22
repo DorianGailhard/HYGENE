@@ -30,7 +30,7 @@ spectral:
   normalized_laplacian: True
 
 training:
-  batch_size: 16
+  batch_size: 128
   lr: 1e-4
   num_steps: -1 # infinite
   max_num_workers: 10
@@ -51,7 +51,7 @@ model:
   emb_features: 32
   hidden_features: 256
   ppgn_features: 128
-  num_layers: 15
+  num_layers: 10
   dropout: 0.1
 
 sign_net:

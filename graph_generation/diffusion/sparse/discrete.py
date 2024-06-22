@@ -22,7 +22,7 @@ class DiscreteGraphDiffusionModel(Module):
         self,
         edge_index,
         batch,
-        num_nodes,
+        node_type,
         node_attr,
         edge_node_attr,
         edge_attr,
@@ -56,7 +56,7 @@ class DiscreteGraphDiffusionModel(Module):
                     node_attr_self_cond, edge_node_attr_self_cond, edge_attr_self_cond = model(
                         edge_index=edge_index,
                         batch=batch,
-                        num_nodes=num_nodes,
+                        node_type=node_type,
                         node_attr=th.cat(
                             [node_attr_in, th.zeros_like(node_attr_in)], dim=-1
                         ),
@@ -198,7 +198,7 @@ class DiscreteGraphDiffusion:
         edge_out = F.softmax(edge_pred, dim=-1)[:, 1]
         return node_out, edge_node_out, edge_out
 
-    def get_loss(self, edge_index, batch, num_nodes, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
+    def get_loss(self, edge_index, batch, node_type, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
         """Compute loss to train the model.
 
         Sample x_pred ~ p(x_t, t), where t ~ U(0, T-1) and x_t ~ q(x_t | x),
@@ -222,7 +222,7 @@ class DiscreteGraphDiffusion:
         node_pred, edge_node_pred, edge_pred = self.model_wrapper(
             edge_index=edge_index,
             batch=batch,
-            num_nodes=num_nodes,
+            node_type=node_type,
             node_attr=node_attr_t,
             edge_node_attr=edge_node_attr_t,
             edge_attr=edge_attr_t,
@@ -236,7 +236,7 @@ class DiscreteGraphDiffusion:
         edge_node_loss = self.edge_node_diffusion.get_loss(edge_node_attr, edge_node_pred)
         edge_loss = self.edge_diffusion.get_loss(edge_attr, edge_pred)
 
-        return node_loss, edge_node_loss, edge_loss
+        return node_loss + edge_node_loss, edge_loss
 
 
 class CategoricalDiffusion(Module):

@@ -149,7 +149,9 @@ class Trainer:
             last_step = self.step == self.cfg.training.num_steps
 
             step_start_time = time()
+            
             batch = next(self.train_iterator)
+            
             loss_terms = self.run_step(batch)
             if self.cfg.training.log_interval > 0 and (
                 self.step % self.cfg.training.log_interval == 0 or last_step
@@ -193,6 +195,7 @@ class Trainer:
 
     def run_step(self, batch):
         batch = batch.to(self.device, non_blocking=True)
+        
         loss, loss_terms = self.method.get_loss(
             batch=batch, model=self.model, sign_net=self.sign_net
         )

@@ -105,7 +105,7 @@ def get_expansion_items(cfg: DictConfig, train_hypergraphs):
 
     # Diffusion
     if cfg.diffusion.name == "discrete":
-        diffusion = gg.diffusion.sparse.DiscretehypergraphDiffusion(
+        diffusion = gg.diffusion.sparse.DiscreteGraphDiffusion(
             self_conditioning=cfg.diffusion.self_conditioning,
             num_steps=cfg.diffusion.num_steps,
         )

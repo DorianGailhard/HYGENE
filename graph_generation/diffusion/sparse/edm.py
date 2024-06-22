@@ -15,12 +15,15 @@ class EDMModel(Module):
         self,
         edge_index,
         batch,
+        node_type,
         node_attr,
+        edge_node_attr,
         edge_attr,
         t,
         model,
         model_kwargs,
         node_attr_self_cond=None,
+        edge_node_attr_self_cond=None,
         edge_attr_self_cond=None,
     ):
         # compute weights
@@ -32,6 +35,7 @@ class EDMModel(Module):
         # compute input
         model_kwargs = dict(model_kwargs, noise_cond=(t.log() / 4.0).float())
         node_attr_in = c_in[batch] * node_attr
+        edge_node_attr_in = c_in[batch] * edge_node_attr
         edge_batch = batch[edge_index[0]]
         edge_attr_in = c_in[edge_batch] * edge_attr
 
@@ -39,16 +43,20 @@ class EDMModel(Module):
         if self.self_conditioning:
             if not model.training:
                 assert (
-                    node_attr_self_cond is not None and edge_attr_self_cond is not None
+                    node_attr_self_cond is not None and edge_node_attr_self_cond is not None and edge_attr_self_cond is not None
                 )
             elif np.random.rand() < 0.5:
                 # compute self-conditioning
                 with th.no_grad():
-                    node_attr_self_cond, edge_attr_self_cond = model(
+                    node_attr_self_cond, edge_node_attr_self_cond, edge_attr_self_cond = model(
                         edge_index=edge_index,
                         batch=batch,
+                        node_type=node_type,
                         node_attr=th.cat(
                             [node_attr_in, th.zeros_like(node_attr_in)], dim=-1
+                        ).float(),
+                        edge_node_attr=th.cat(
+                            [edge_node_attr_in, th.zeros_like(edge_node_attr_in)], dim=-1
                         ).float(),
                         edge_attr=th.cat(
                             [edge_attr_in, th.zeros_like(edge_attr_in)], dim=-1
@@ -58,36 +66,45 @@ class EDMModel(Module):
                     node_attr_self_cond = (
                         c_skip[batch] * node_attr + c_out[batch] * node_attr_self_cond
                     ).detach()
+                    edge_node_attr_self_cond = (
+                        c_skip[batch] * edge_node_attr + c_out[batch] * node_attr_self_cond
+                    ).detach()
                     edge_attr_self_cond = (
                         c_skip[edge_batch] * edge_attr
                         + c_out[edge_batch] * edge_attr_self_cond
                     ).detach()
             else:
                 node_attr_self_cond = th.zeros_like(node_attr)
+                edge_node_attr_self_cond = th.zeros_like(edge_node_attr)
                 edge_attr_self_cond = th.zeros_like(edge_attr)
 
             # scale self-conditioning
             node_attr_self_cond = node_attr_self_cond / sigma_data
+            edge_node_attr_self_cond = edge_node_attr_self_cond / sigma_data
             edge_attr_self_cond = edge_attr_self_cond / sigma_data
 
             # concatenate with input
             node_attr_in = th.cat([node_attr_in, node_attr_self_cond], dim=-1)
+            edge_node_attr_in = th.cat([edge_node_attr_in, edge_node_attr_self_cond], dim=-1)
             edge_attr_in = th.cat([edge_attr_in, edge_attr_self_cond], dim=-1)
 
         # compute output
-        node_attr_pred, edge_attr_pred = model(
+        node_attr_pred, edge_node_attr_pred, edge_attr_pred = model(
             edge_index=edge_index,
             batch=batch,
+            node_type=node_type,
             node_attr=node_attr_in.float(),
+            edge_node_attr=edge_node_attr_in.float(),
             edge_attr=edge_attr_in.float(),
             **model_kwargs,
         )
         node_attr_pred = c_skip[batch] * node_attr + c_out[batch] * node_attr_pred
+        edge_node_attr_pred = c_skip[batch] * edge_node_attr + c_out[batch] * edge_node_attr_pred
         edge_attr_pred = (
             c_skip[edge_batch] * edge_attr + c_out[edge_batch] * edge_attr_pred
         )
 
-        return node_attr_pred, edge_attr_pred
+        return node_attr_pred, edge_node_attr_pred, edge_attr_pred
 
 
 class EDM:
@@ -116,9 +133,10 @@ class EDM:
         self.model_wrapper.to(device)
         return self
 
-    def get_loss(self, edge_index, batch, node_attr, edge_attr, model, model_kwargs):
+    def get_loss(self, edge_index, batch, node_type, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
         # rescale attributes to {-1, 1}
         node_attr = node_attr.float() * 2 - 1
+        edge_node_attr = edge_node_attr.float() * 2 - 1
         edge_attr = edge_attr.float() * 2 - 1
 
         # sample noise level
@@ -129,30 +147,35 @@ class EDM:
         # sample noise
         edge_batch = batch[edge_index[0]]
         node_noise = th.randn_like(node_attr) * t[batch]
+        edge_node_noise = th.randn_like(edge_node_attr) * t[batch]
         edge_noise = self.edge_randn(edge_index) * t[edge_batch]
 
         # make prediction
-        node_pred, edge_pred = self.model_wrapper(
+        node_pred, edge_node_pred, edge_pred = self.model_wrapper(
             edge_index=edge_index,
             batch=batch,
+            node_type=node_type,
             node_attr=(node_attr + node_noise).unsqueeze(1),
+            edge_node_attr=(edge_node_attr + edge_node_noise).unsqueeze(1),
             edge_attr=(edge_attr + edge_noise).unsqueeze(1),
             t=t,
             model=model,
             model_kwargs=model_kwargs,
         )
         node_pred = node_pred.float().squeeze(1)
+        edge_node_pred = edge_node_pred.float().squeeze(1)
         edge_pred = edge_pred.float().squeeze(1)
 
         # compute loss
         weight = (t**2 + self.sigma_data**2) / (t * self.sigma_data) ** 2
         node_loss = weight[batch] * (node_pred - node_attr) ** 2
+        edge_node_loss = weight[batch] * (edge_node_pred - edge_node_attr) ** 2
         edge_loss = weight[edge_batch] * (edge_pred - edge_attr) ** 2
 
-        return node_loss, edge_loss
+        return node_loss + edge_node_loss, edge_loss
 
     @th.no_grad()
-    def sample(self, edge_index, batch, model, model_kwargs):
+    def sample(self, edge_index, node_type, batch, model, model_kwargs):
         num_graphs = batch.max().item() + 1
 
         # time step discretization
@@ -167,15 +190,18 @@ class EDM:
 
         # sample latents
         node_attr_next = th.randn_like(batch, dtype=th.float64)[:, None] * t_steps[0]
+        edge_node_attr_next = th.randn_like(batch, dtype=th.float64)[:, None] * t_steps[0]
         edge_attr_next = (
             self.edge_randn(edge_index, dtype=th.float64)[:, None] * t_steps[0]
         )
 
         node_attr_pred = th.zeros_like(node_attr_next)
+        node_attr_pred = th.zeros_like(edge_node_attr_next)
         edge_attr_pred = th.zeros_like(edge_attr_next)
         # sample loop
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):
             node_attr_cur = node_attr_next
+            edge_node_attr_cur = node_attr_next
             edge_attr_cur = edge_attr_next
 
             # increase noise temporarily
@@ -188,6 +214,9 @@ class EDM:
             node_attr_hat = node_attr_cur + (
                 t_hat**2 - t_cur**2
             ).sqrt() * self.S_noise * th.randn_like(node_attr_cur)
+            edge_node_attr_hat = edge_node_attr_cur + (
+                t_hat**2 - t_cur**2
+            ).sqrt() * self.S_noise * th.randn_like(edge_node_attr_cur)
             edge_attr_hat = (
                 edge_attr_cur
                 + (t_hat**2 - t_cur**2).sqrt()
@@ -196,10 +225,12 @@ class EDM:
             )
 
             # Euler step
-            node_attr_pred, edge_attr_pred = self.model_wrapper(
+            node_attr_pred, edge_node_attr_pred, edge_attr_pred = self.model_wrapper(
                 edge_index=edge_index,
                 batch=batch,
+                node_type=node_type,
                 node_attr=node_attr_hat,
+                edge_node_attr=edge_node_attr_hat,
                 edge_attr=edge_attr_hat,
                 t=t_hat.repeat(num_graphs),
                 model=model,
@@ -208,16 +239,20 @@ class EDM:
                 edge_attr_self_cond=edge_attr_pred,
             )
             node_attr_d = (node_attr_hat - node_attr_pred) / t_hat
+            edge_node_attr_d = (edge_node_attr_hat - edge_node_attr_pred) / t_hat
             edge_attr_d = (edge_attr_hat - edge_attr_pred) / t_hat
             node_attr_next = node_attr_cur + (t_next - t_hat) * node_attr_d
+            edge_node_attr_next = edge_node_attr_cur + (t_next - t_hat) * edge_node_attr_d
             edge_attr_next = edge_attr_cur + (t_next - t_hat) * edge_attr_d
 
             # 2nd order correction
             if i < self.num_steps - 1:
-                node_attr_pred, edge_attr_pred = self.model_wrapper(
+                node_attr_pred, edge_node_attr_pred, edge_attr_pred = self.model_wrapper(
                     edge_index=edge_index,
                     batch=batch,
+                    node_type=node_type,
                     node_attr=node_attr_next,
+                    edge_node_attr=edge_node_attr_next,
                     edge_attr=edge_attr_next,
                     t=t_next.repeat(num_graphs),
                     model=model,
@@ -226,9 +261,13 @@ class EDM:
                     edge_attr_self_cond=edge_attr_pred,
                 )
                 node_attr_d_prime = (node_attr_next - node_attr_pred) / t_next
+                edge_node_attr_d_prime = (edge_node_attr_next - edge_node_attr_pred) / t_next
                 edge_attr_d_prime = (edge_attr_next - edge_attr_pred) / t_next
                 node_attr_next = node_attr_hat + (t_next - t_hat) * (
                     0.5 * node_attr_d + 0.5 * node_attr_d_prime
+                )
+                edge_node_attr_next = edge_node_attr_hat + (t_next - t_hat) * (
+                    0.5 * edge_node_attr_d + 0.5 * edge_node_attr_d_prime
                 )
                 edge_attr_next = edge_attr_hat + (t_next - t_hat) * (
                     0.5 * edge_attr_d + 0.5 * edge_attr_d_prime
@@ -236,9 +275,10 @@ class EDM:
 
         # rescale attributes to {0, 1}
         node_attr_out = (node_attr_next + 1) / 2
+        edge_node_attr_out = (edge_node_attr_next + 1) / 2
         edge_attr_out = (edge_attr_next + 1) / 2
 
-        return node_attr_out.squeeze(1), edge_attr_out.squeeze(1)
+        return node_attr_out.squeeze(1), edge_node_attr_out.squeeze(1), edge_attr_out.squeeze(1)
 
     @staticmethod
     def edge_randn(edge_index, dtype=th.float32) -> th.Tensor:
