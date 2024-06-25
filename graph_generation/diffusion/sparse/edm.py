@@ -34,8 +34,8 @@ class EDMModel(Module):
 
         # compute input
         model_kwargs = dict(model_kwargs, noise_cond=(t.log() / 4.0).float())
-        node_attr_in = c_in[batch] * node_attr
-        edge_node_attr_in = c_in[batch] * edge_node_attr
+        node_attr_in = c_in[batch[node_type == 1]] * node_attr
+        edge_node_attr_in = c_in[batch[node_type == 0]] * edge_node_attr
         edge_batch = batch[edge_index[0]]
         edge_attr_in = c_in[edge_batch] * edge_attr
 
@@ -64,10 +64,10 @@ class EDMModel(Module):
                         **model_kwargs,
                     )
                     node_attr_self_cond = (
-                        c_skip[batch] * node_attr + c_out[batch] * node_attr_self_cond
+                        c_skip[batch[node_type == 1]] * node_attr + c_out[batch[node_type == 1]] * node_attr_self_cond
                     ).detach()
                     edge_node_attr_self_cond = (
-                        c_skip[batch] * edge_node_attr + c_out[batch] * node_attr_self_cond
+                        c_skip[batch[node_type == 0]] * edge_node_attr + c_out[batch[node_type == 0]] * edge_node_attr_self_cond
                     ).detach()
                     edge_attr_self_cond = (
                         c_skip[edge_batch] * edge_attr
@@ -98,8 +98,8 @@ class EDMModel(Module):
             edge_attr=edge_attr_in.float(),
             **model_kwargs,
         )
-        node_attr_pred = c_skip[batch] * node_attr + c_out[batch] * node_attr_pred
-        edge_node_attr_pred = c_skip[batch] * edge_node_attr + c_out[batch] * edge_node_attr_pred
+        node_attr_pred = c_skip[batch[node_type == 1]] * node_attr + c_out[batch[node_type == 1]] * node_attr_pred
+        edge_node_attr_pred = c_skip[batch[node_type == 0]] * edge_node_attr + c_out[batch[node_type == 0]] * edge_node_attr_pred
         edge_attr_pred = (
             c_skip[edge_batch] * edge_attr + c_out[edge_batch] * edge_attr_pred
         )
@@ -146,8 +146,9 @@ class EDM:
 
         # sample noise
         edge_batch = batch[edge_index[0]]
-        node_noise = th.randn_like(node_attr) * t[batch]
-        edge_node_noise = th.randn_like(edge_node_attr) * t[batch]
+
+        node_noise = th.randn_like(node_attr) * t[batch[node_type == 1]]
+        edge_node_noise = th.randn_like(edge_node_attr) * t[batch[node_type == 0]]
         edge_noise = self.edge_randn(edge_index) * t[edge_batch]
 
         # make prediction
@@ -168,11 +169,15 @@ class EDM:
 
         # compute loss
         weight = (t**2 + self.sigma_data**2) / (t * self.sigma_data) ** 2
-        node_loss = weight[batch] * (node_pred - node_attr) ** 2
-        edge_node_loss = weight[batch] * (edge_node_pred - edge_node_attr) ** 2
+        node_loss = weight[batch[node_type == 1]] * (node_pred - node_attr) ** 2
+        edge_node_loss = weight[batch[node_type == 0]] * (edge_node_pred - edge_node_attr) ** 2
         edge_loss = weight[edge_batch] * (edge_pred - edge_attr) ** 2
+        
+        node_loss_complete = th.zeros_like(batch).to(th.float)
+        node_loss_complete[node_type == 0] = edge_node_loss
+        node_loss_complete[node_type == 1] = node_loss
 
-        return node_loss + edge_node_loss, edge_loss
+        return node_loss_complete, edge_loss
 
     @th.no_grad()
     def sample(self, edge_index, node_type, batch, model, model_kwargs):

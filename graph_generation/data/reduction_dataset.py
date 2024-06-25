@@ -22,15 +22,22 @@ class RandRedDataset(IterableDataset, ABC):
         data = []
         while True:
             reduced_hypergraph = red.get_reduced_hypergraph(rng)
+            
+            node_type = np.zeros(red.bipartite_adj.shape[0])
+            node_type[:red.n] = 1
+            
+            node_type_reduced = np.zeros(reduced_hypergraph.bipartite_adj.shape[0])
+            node_type_reduced[:reduced_hypergraph.n] = 1
             data.append(
                 ReducedGraphData(
                     target_size=red.n,
-                    original_size=reduced_hypergraph.n,
                     reduction_level=red.level,
-                    adj=red.clique_adj.astype(bool).astype(np.float32),
+                    adj=red.bipartite_adj.astype(bool).astype(np.float32),
+                    node_type=node_type,
                     node_expansion=red.node_expansion,
                     edge_expansion=red.edge_expansion,
                     adj_reduced=reduced_hypergraph.bipartite_adj.astype(bool).astype(np.float32),
+                    node_type_reduced=node_type_reduced,
                     expansion_matrix=reduced_hypergraph.expansion_matrix,
                     spectral_features_reduced=self.spectrum_extractor(reduced_hypergraph.bipartite_adj)
                     if self.spectrum_extractor is not None

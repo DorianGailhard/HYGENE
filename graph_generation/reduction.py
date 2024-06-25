@@ -43,7 +43,7 @@ class Reduction(ABC):
             else expansion_matrix.sum(0)[:self.n].astype(np.int32)
         )
         self.edge_expansion = (
-            np.ones(self.n, dtype=np.int32)
+            np.ones(self.bipartite_adj.shape[0] - self.n, dtype=np.int32)
             if expansion_matrix is None
             else expansion_matrix.sum(0)[self.n:].astype(np.int32)
         )

@@ -10,7 +10,7 @@ dataset:
   name: hypergraphSBM
 
 training:
-  batch_size: 32
+  batch_size: 64
 
 validation:
   batch_size: 32

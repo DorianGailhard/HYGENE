@@ -64,7 +64,7 @@ class SparsePPGN(Module):
         self,
         edge_index,
         batch,
-        num_nodes,
+        node_type,
         node_attr,
         edge_node_attr,
         edge_attr,
@@ -81,15 +81,15 @@ class SparsePPGN(Module):
         noise_cond_emb = self.noise_cond_emb_layer(noise_cond[..., None])
         red_frac_emb = self.red_frac_emb_layer(red_frac[..., None])
         target_size_emb = self.target_size_emb_layer(target_size[..., None])
-
+        
         # Input
         x_node = th.cat(
             [
                 node_attr_emb,
                 node_emb,
-                noise_cond_emb[batch],
-                red_frac_emb[batch],
-                target_size_emb[batch],
+                noise_cond_emb[batch[node_type == 1]],
+                red_frac_emb[batch[node_type == 1]],
+                target_size_emb[batch[node_type == 1]],
             ],
             dim=-1,
         )
@@ -100,27 +100,43 @@ class SparsePPGN(Module):
             [
                 edge_node_attr_emb,
                 edge_node_emb,
-                noise_cond_emb[batch],
-                red_frac_emb[batch],
-                target_size_emb[batch],
+                noise_cond_emb[batch[node_type == 0]],
+                red_frac_emb[batch[node_type == 0]],
+                target_size_emb[batch[node_type == 0]],
             ],
             dim=-1,
         )
         x_edge_node = self.dropout(x_edge_node)
-        x_edge_node = self.edge_node_in_mlp(x_edge_node)
-
+        x_edge_node = self.node_in_mlp(x_edge_node)
+        
+        
         edge_batch = batch[edge_index[0]]
+        
+        # Recover the node indices from the graph node index
+        # This is because the embeddings for each side of the bipartite graph are 
+        # split so the indices in the graph do not directly correspond to the arrays indices
+        ones = th.ones(node_type.size(0), dtype=th.int, device=node_attr.device)
+        
+        cumsum_ones = th.cumsum(ones, dim=0).to(th.int) - 1
+        
+        indices_map = th.zeros_like(batch).to(th.int)
+        indices_map[node_type == 0] = th.sum(node_type).to(th.int).item() + cumsum_ones[:edge_node_attr.size(0)]
+        indices_map[node_type == 1] = cumsum_ones[:node_attr.size(0)]
+        
+        all_nodes_emb = th.cat((node_emb, edge_node_emb), dim=0)
+        
         x_edge = th.cat(
             [
                 edge_attr_emb,
-                node_emb[edge_index[0]],
-                node_emb[edge_index[1]],
+                all_nodes_emb[indices_map[edge_index[0]]], # Needed here
+                all_nodes_emb[indices_map[edge_index[1]]], # Needed here
                 noise_cond_emb[edge_batch],
                 red_frac_emb[edge_batch],
                 target_size_emb[edge_batch],
             ],
             dim=-1,
         )
+        
         x_edge = self.dropout(x_edge)
         x_edge = self.edge_in_mlp(x_edge)
 
@@ -129,11 +145,15 @@ class SparsePPGN(Module):
         # for each triangle (a, b, c) the message x[a] * x[b] is sent to x[c]
         # a = (s,u), b = (u,v), c = (v,t)
         # add self-loops
-        self_loop_index = th.arange(node_attr.size(0), device=node_attr.device)[
+        self_loop_index = th.arange(node_attr.size(0) + edge_node_attr.size(0), device=node_attr.device)[
             None, :
         ].expand(2, -1)
+            
         edge_index_ext = th.cat([self_loop_index, edge_index], dim=1)
         x = th.cat([x_node, x_edge_node, x_edge], dim=0)
+        
+        # Change the indices so they correspond to the indices of the graph
+        x[:node_type.size(0)] = x[indices_map]
 
         n = node_attr.size(0) + edge_node_attr.size(0)
         edge_id = edge_index_ext[0] * n + edge_index_ext[1]
@@ -183,8 +203,8 @@ class SparsePPGN(Module):
         x = self.dropout(x)
 
         # Out layers
-        out_node = self.node_out_layer(x[:node_attr.size(0)])
-        out_edge_node = self.node_out_layer(x[node_attr.size(0):n])
+        out_node = self.node_out_layer(x[:n][node_type == 1])
+        out_edge_node = self.edge_node_out_layer(x[:n][node_type == 0])
         out_edge = self.edge_out_layer(x[n:])
 
         # make out_edge symmetric
