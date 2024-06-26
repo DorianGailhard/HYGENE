@@ -47,7 +47,7 @@ class Expansion(Method):
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
 
-        while node_type.sum() < target_size.sum():
+        while node_type.sum() < target_size.sum() and len(node_type) < 100:
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
                 batch,
@@ -115,10 +115,10 @@ class Expansion(Method):
         node_map = th.repeat_interleave(
             th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
         )
-        expanded_node_type = th.repeat_interleave(node_type, node_expansion)
+        expanded_node_type = node_type[node_map]
         both_type_node_emb = both_type_node_emb_reduced[node_map]
         batch = batch_reduced[node_map]
-        size = scatter(node_type, batch)
+        size = scatter(expanded_node_type, batch)
         expansion_matrix = SparseTensor(
             row=th.arange(node_map.size(0), device=self.device),
             col=node_map,
@@ -155,11 +155,11 @@ class Expansion(Method):
         node_pred, edge_node_pred, augmented_edge_pred = self.diffusion.sample(
             edge_index=augmented_edge_index,
             batch=batch,
-            node_type=node_type,
+            node_type=expanded_node_type,
             model=model,
             model_kwargs={
-                "node_emb": both_type_node_emb[node_type == 1],
-                "edge_node_emb": both_type_node_emb[node_type == 0],
+                "node_emb": both_type_node_emb[expanded_node_type == 1],
+                "edge_node_emb": both_type_node_emb[expanded_node_type == 0],
                 "red_frac": 1 - size / expanded_size,
                 "target_size": target_size.float(),
             },
@@ -193,11 +193,11 @@ class Expansion(Method):
             sparse_sizes=adj_augmented.sizes(),
         )
         
-        node_expansion = th.zeros(batch.size(0))
-        node_expansion[node_type == 0] = edge_node_attr
-        node_expansion[node_type == 1] = node_attr
+        all_node_attr = th.zeros(batch.size(0), dtype=th.long, device = node_attr.device)
+        all_node_attr[expanded_node_type == 0] = edge_node_attr
+        all_node_attr[expanded_node_type == 1] = node_attr
 
-        return adj, batch, node_expansion + 1, expanded_node_type
+        return adj, batch, all_node_attr + 1, expanded_node_type
 
     def get_loss(self, batch, model: Module, sign_net: Module):
         """Returns a weighted sum of the node and edge expansion loss and the augmented edge loss."""

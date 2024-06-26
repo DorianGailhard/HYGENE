@@ -28,6 +28,7 @@ class RandRedDataset(IterableDataset, ABC):
             
             node_type_reduced = np.zeros(reduced_hypergraph.bipartite_adj.shape[0])
             node_type_reduced[:reduced_hypergraph.n] = 1
+            print(red.edge_expansion)
             data.append(
                 ReducedGraphData(
                     target_size=red.n,

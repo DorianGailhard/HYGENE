@@ -194,19 +194,19 @@ class EDM:
         t_steps = th.cat([t_steps, th.zeros_like(t_steps[:1])])  # t_N = 0
 
         # sample latents
-        node_attr_next = th.randn_like(batch, dtype=th.float64)[:, None] * t_steps[0]
-        edge_node_attr_next = th.randn_like(batch, dtype=th.float64)[:, None] * t_steps[0]
+        node_attr_next = th.randn_like(batch[node_type == 1], dtype=th.float64)[:, None] * t_steps[0]
+        edge_node_attr_next = th.randn_like(batch[node_type == 0], dtype=th.float64)[:, None] * t_steps[0]
         edge_attr_next = (
             self.edge_randn(edge_index, dtype=th.float64)[:, None] * t_steps[0]
         )
 
         node_attr_pred = th.zeros_like(node_attr_next)
-        node_attr_pred = th.zeros_like(edge_node_attr_next)
+        edge_node_attr_pred = th.zeros_like(edge_node_attr_next)
         edge_attr_pred = th.zeros_like(edge_attr_next)
         # sample loop
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):
             node_attr_cur = node_attr_next
-            edge_node_attr_cur = node_attr_next
+            edge_node_attr_cur = edge_node_attr_next
             edge_attr_cur = edge_attr_next
 
             # increase noise temporarily

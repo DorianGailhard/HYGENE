@@ -131,28 +131,26 @@ class Reduction(ABC):
     def collapse_duplicate_edges(self, coarsened_incidence: csr_array):
         # Convert the matrix to CSC format for efficient column operations
         csc_matrix_form = csc_matrix(coarsened_incidence)
-        
+    
         # Create a dictionary to store unique columns and their counts
         unique_columns = {}
         column_map = {}
-        count_vector = np.zeros(coarsened_incidence.shape[1], dtype=int)
         next_col_index = 0
-        
+        mergings = {}
+    
         # Iterate through each column
         for col_index in range(csc_matrix_form.shape[1]):
             # Extract the column as a tuple of (row_index, data)
             col_data = tuple(zip(csc_matrix_form[:, col_index].indices, csc_matrix_form[:, col_index].data))
-        
+    
             if col_data in unique_columns:
-                # If the column is already encountered, map to the existing column
-                count_vector[unique_columns[col_data]] += 1
+                mergings[unique_columns[col_data]].append(col_index)
             else:
-                # If it's a new column, add it to unique_columns
                 unique_columns[col_data] = next_col_index
                 column_map[col_index] = next_col_index
-                count_vector[next_col_index] = 1
+                mergings[next_col_index] = [col_index]
                 next_col_index += 1
-        
+    
         # Construct the collapsed matrix
         collapsed_data = []
         collapsed_rows = []
@@ -162,29 +160,23 @@ class Reduction(ABC):
             collapsed_data.extend(col.data)
             collapsed_rows.extend(col.indices)
             collapsed_cols.extend([new_col_index] * len(col.data))
-        
+    
         # Create the collapsed matrix
         collapsed_matrix = csr_array((collapsed_data, (collapsed_rows, collapsed_cols)), shape=(coarsened_incidence.shape[0], next_col_index))
-
+    
         # Create the edge lifting matrix, which is an equivalent to the lifting matrix but for the edges node in the bipartite graph
-        counter = count_vector[:next_col_index]
-        
         rows = []
         cols = []
-        current_row = 0
-        
-        for col_idx, count in enumerate(counter):
-            for i in range(count):
-                rows.append(current_row)
+    
+        for col, col_idx in unique_columns.items():
+            for node_idx in mergings[col_idx]:
                 cols.append(col_idx)
-                current_row += 1
+                rows.append(node_idx)
     
         data = np.ones(len(rows))
-        nrows = np.sum(counter)  # The maximum number of 1s in any column determines the number of rows
-        ncols = len(counter)  # One column per counter value
-        
-        lifting_matrix = coo_array((data, (rows, cols)), shape=(nrows, ncols))
-
+    
+        lifting_matrix = coo_array((data, (rows, cols)), shape=(coarsened_incidence.shape[1], len(unique_columns)))
+    
         return collapsed_matrix, lifting_matrix
     
 
