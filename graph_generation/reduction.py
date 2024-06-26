@@ -207,8 +207,7 @@ class Reduction(ABC):
             ):
                 partitions.append(contraction_set)
                 marked[contraction_set] = True
-                if marked.sum() - len(partitions) >= reduction_fraction * self.n:
-                    break
+                break
         
         # construct projection matrix
         P = eye(self.n, format="lil")

@@ -219,7 +219,7 @@ class Trainer:
         for beta in self.cfg.ema.betas:
             val_results[f"ema_{beta}"] = self.evaluate(self.validation_hypergraphs, beta)
 
-            # Compute validation score
+            """# Compute validation score
             unique_novel_valid_keys = [
                 str(m) for m in self.metrics if "UniqueNovelValid" in str(m)
             ]
@@ -233,7 +233,7 @@ class Trainer:
             # Evaluate on test set if validation score improved
             if validation_score >= self.best_validation_scores[beta]:
                 self.best_validation_scores[beta] = validation_score
-                test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)
+                test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)"""
 
         # Log results
         self.log({"validation": val_results, "test": test_results})
@@ -286,7 +286,7 @@ class Trainer:
         for metric in self.metrics:
             results[str(metric)] = metric(
                 reference_hypergraphs=eval_hypergraphs,
-                pred_hypergraphs=pred_hypergraphs,
+                predicted_hypergraphs=pred_hypergraphs,
                 train_hypergraphs=self.train_hypergraphs,
             )
 

@@ -189,6 +189,8 @@ def main(cfg: DictConfig):
         gg.metrics.NodeNumDiff(),
         gg.metrics.DegreeDistrWasserstein(),
         gg.metrics.Spectral(),
+        gg.metrics.Uniqueness(),
+        gg.metrics.Novelty(),
     ]
 
     if "hypergraphSBM" in cfg.dataset.name:

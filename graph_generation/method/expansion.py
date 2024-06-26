@@ -47,7 +47,7 @@ class Expansion(Method):
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
 
-        while node_type.sum() < target_size.sum() and len(node_type) < 100:
+        while node_type.sum() < target_size.sum():
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
                 batch,
@@ -57,19 +57,22 @@ class Expansion(Method):
                 model=model,
                 sign_net=sign_net,
             )
-            if node_expansion.max() <= 1:
+            if node_expansion[node_type == 1].max() <= 1:
                 break
 
         # return hypergraphs
         adjs, num_nodes = unbatch_adj(adj, batch, node_type)
         hypergraphs = []
         
-        for (adj, num_node) in zip(adjs, num_nodes):
+        for (adj, n) in zip(adjs, num_nodes):
             # remind that we have :
             # Adj_bipartite = ( 0  H)
             #                 (H^T 0)
-            num_hyperedges = adj.shape[0] - num_node
-            incidence_matrix = adj[:num_nodes, num_nodes:num_nodes + num_hyperedges]
+            adj = adj.to_dense().cpu().numpy()
+            num_hyperedges = adj.shape[0] - n
+
+            incidence_matrix = adj[:n, n:n + num_hyperedges]
+            
             H = hnx.Hypergraph.from_incidence_matrix(incidence_matrix)
             hypergraphs.append(H)
         
@@ -148,7 +151,7 @@ class Expansion(Method):
                 th.ceil(size / (1 - random_reduction_fraction)).long(),
                 size + 1,
             ),
-            target_size,
+            th.ones_like((target_size)) #target_size,
         )
 
         # make predictions

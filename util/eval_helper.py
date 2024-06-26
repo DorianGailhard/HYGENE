@@ -253,18 +253,13 @@ def eval_fraction_unique(fake_hypergraphs, precise=False):
     fake_evaluated = []
     for fake_g in fake_hypergraphs:
         unique = True
-        if not fake_g.number_of_nodes() == 0:
+        if not len(fake_g.nodes) == 0:
             for fake_old in fake_evaluated:
-                if precise:
-                    if could_be_isomorphic(fake_g, fake_old):
-                        count_non_unique += 1
-                        unique = False
-                        break
-                else:
-                    if could_be_isomorphic(fake_g, fake_old):
-                        count_non_unique += 1
-                        unique = False
-                        break
+                if could_be_isomorphic(fake_g, fake_old):
+                    count_non_unique += 1
+                    unique = False
+                    break
+                
             if unique:
                 fake_evaluated.append(fake_g)
 

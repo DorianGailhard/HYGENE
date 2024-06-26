@@ -87,15 +87,15 @@ class Uniqueness(Metric):
     def __str__(self):
         return "Uniqueness"
 
-    def __call__(self, reference_graphs, predicted_graphs, train_graphs):
-        return eval_fraction_unique(predicted_graphs, precise=True)
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
+        return eval_fraction_unique(predicted_hypergraphs, precise=True)
 
 
 class Novelty(Metric):
     def __str__(self):
         return "Novelty"
 
-    def __call__(self, reference_graphs, predicted_graphs, train_graphs):
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
         return 1 - eval_fraction_isomorphic(
-            fake_graphs=predicted_graphs, train_graphs=train_graphs
+            fake_hypergraphs=predicted_hypergraphs, train_hypergraphs=train_hypergraphs
         )
