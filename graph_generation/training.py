@@ -281,6 +281,9 @@ class Trainer:
         results["pred_hypergraphs"] = [pred_hypergraphs[i] for i in pred_perm]
         if self.device == "cuda":
             th.cuda.empty_cache()
+            
+        with open("debug.pkl", "wb") as f: # Temporary
+            pickle.dump(pred_hypergraphs, f)
 
         # Validate hypergraphs
         for metric in self.metrics:

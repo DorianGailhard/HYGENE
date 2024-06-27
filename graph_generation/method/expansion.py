@@ -4,6 +4,7 @@ from torch.nn import Module
 from torch_geometric.utils import to_edge_index
 from torch_scatter import scatter
 from torch_sparse import SparseTensor
+import numpy as np
 
 from .method import Method
 
@@ -69,12 +70,14 @@ class Expansion(Method):
             # Adj_bipartite = ( 0  H)
             #                 (H^T 0)
             adj = adj.to_dense().cpu().numpy()
-            num_hyperedges = adj.shape[0] - n
-
-            incidence_matrix = adj[:n, n:n + num_hyperedges]
             
-            H = hnx.Hypergraph.from_incidence_matrix(incidence_matrix)
-            hypergraphs.append(H)
+            if np.max(adj) > 0. : # Dirty fix
+                num_hyperedges = adj.shape[0] - n
+    
+                incidence_matrix = adj[:n, n:n + num_hyperedges]
+                
+                H = hnx.Hypergraph.from_incidence_matrix(incidence_matrix)
+                hypergraphs.append(H)
         
         return hypergraphs
 
@@ -151,7 +154,7 @@ class Expansion(Method):
                 th.ceil(size / (1 - random_reduction_fraction)).long(),
                 size + 1,
             ),
-            th.ones_like((target_size)) #target_size,
+            target_size,
         )
 
         # make predictions

@@ -200,14 +200,21 @@ class Reduction(ABC):
         contraction_sets = contraction_sets[perm]
         partitions = []
         marked = np.zeros(self.n, dtype=bool)
+        merged = 0
         for contraction_set in contraction_sets:
+            neighbors_contraction_set = np.zeros(self.n, dtype=bool)
+            neighbors_contraction_set[self.clique_adj[contraction_set].sum(axis=0) > 0] = True
+            neighbors_contraction_set[contraction_set] = True
+            
             if (
-                not marked[contraction_set].any()
+                not marked[neighbors_contraction_set].any()
                 and rng.uniform() >= self.rand_lambda  # randomize
             ):
                 partitions.append(contraction_set)
-                marked[contraction_set] = True
-                break
+                marked[neighbors_contraction_set] = True
+                merged += len(contraction_set)
+                if merged - len(partitions) >= reduction_fraction * self.n:
+                    break
         
         # construct projection matrix
         P = eye(self.n, format="lil")
