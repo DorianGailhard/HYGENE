@@ -78,6 +78,9 @@ class Expansion(Method):
                 
                 H = hnx.Hypergraph.from_incidence_matrix(incidence_matrix)
                 hypergraphs.append(H)
+            else:
+                H = hnx.Hypergraph(np.ones((2,2)))
+                hypergraphs.append(H)
         
         return hypergraphs
 
