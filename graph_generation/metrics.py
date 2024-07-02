@@ -35,16 +35,16 @@ class NodeNumDiff(Metric):
         return "NodeNumDiff"
 
     def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
-        ref_node_num = np.array([len(H)
+        ref_node_num = np.array([len(H.nodes)
                                 for H in reference_hypergraphs])
-        pred_node_num = np.array([len(H)
+        pred_node_num = np.array([len(H.nodes)
                                  for H in predicted_hypergraphs])
         return np.mean(np.abs(ref_node_num - pred_node_num))
 
 
-class DegreeDistrWasserstein(Metric):
+class NodeDegreeDistrWasserstein(Metric):
     def __str__(self):
-        return "DegreeDistrWasserstein"
+        return "NodeDegreeDistrWasserstein"
 
     def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
         reference_dist = []
@@ -54,6 +54,38 @@ class DegreeDistrWasserstein(Metric):
         pred_dist = []
         for H in predicted_hypergraphs:
             pred_dist += hnx.reports.descriptive_stats.degree_dist(H)
+
+        # Convert to counters
+        degree_dist1 = Counter(reference_dist)
+        degree_dist2 = Counter(pred_dist)
+        
+        # Extract keys (degree values) and values (frequencies) from the counters
+        degree_dist1_keys = list(degree_dist1.keys())
+        degree_dist1_values = list(degree_dist1.values())
+        degree_dist2_keys = list(degree_dist2.keys())
+        degree_dist2_values = list(degree_dist2.values())
+        
+        # Compute the Wasserstein distance
+        return wasserstein_distance(
+            np.array(degree_dist1_keys),
+            np.array(degree_dist2_keys),
+            np.array(degree_dist1_values),
+            np.array(degree_dist2_values)
+        )
+
+
+class EdgeSizeDistrWasserstein(Metric):
+    def __str__(self):
+        return "EdgeSizeDistrWasserstein"
+
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
+        reference_dist = []
+        for H in reference_hypergraphs:
+            reference_dist += hnx.reports.descriptive_stats.edge_size_dist(H)
+    
+        pred_dist = []
+        for H in predicted_hypergraphs:
+            pred_dist += hnx.reports.descriptive_stats.edge_size_dist(H)
 
         # Convert to counters
         degree_dist1 = Counter(reference_dist)

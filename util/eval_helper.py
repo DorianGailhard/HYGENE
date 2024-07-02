@@ -236,7 +236,7 @@ def could_be_isomorphic(hg1, hg2):
     sv2.sort()
 
     # Compare the singular values
-    return np.array_equal(sv1, sv2)
+    return len(sv1) == len(sv2) and np.allclose(sv1, sv2)
 
 
 def eval_fraction_isomorphic(fake_hypergraphs, train_hypergraphs):

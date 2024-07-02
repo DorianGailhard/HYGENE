@@ -187,7 +187,8 @@ def main(cfg: DictConfig):
     # Metrics
     validation_metrics = [
         gg.metrics.NodeNumDiff(),
-        gg.metrics.DegreeDistrWasserstein(),
+        gg.metrics.NodeDegreeDistrWasserstein(),
+        gg.metrics.EdgeSizeDistrWasserstein(),
         gg.metrics.Spectral(),
         gg.metrics.Uniqueness(),
         gg.metrics.Novelty(),

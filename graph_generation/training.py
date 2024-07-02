@@ -309,7 +309,7 @@ class Trainer:
             H = pred_hypergraphs[i]
             ax = axs[i // n, i % n]
             hnx.drawing.rubber_band.draw(H)
-            ax.title.set_text(f"N = {len(H)}")
+            ax.title.set_text(f"N = {len(H.nodes)}")
             ax.title.set_fontsize(40)
         fig.tight_layout()
         results["examples"] = fig
