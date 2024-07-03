@@ -151,7 +151,7 @@ class Trainer:
             step_start_time = time()
             
             batch = next(self.train_iterator)
-            
+
             loss_terms = self.run_step(batch)
             if self.cfg.training.log_interval > 0 and (
                 self.step % self.cfg.training.log_interval == 0 or last_step

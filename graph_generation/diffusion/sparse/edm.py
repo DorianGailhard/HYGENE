@@ -136,7 +136,7 @@ class EDM:
     def get_loss(self, edge_index, batch, node_type, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
         # rescale attributes to {-1, 1}
         node_attr = node_attr.float() * 2 - 1
-        edge_node_attr = edge_node_attr.float() * 2 - 1
+        edge_node_attr = edge_node_attr.float() - 1
         edge_attr = edge_attr.float() * 2 - 1
 
         # sample noise level
@@ -278,9 +278,9 @@ class EDM:
                     0.5 * edge_attr_d + 0.5 * edge_attr_d_prime
                 )
 
-        # rescale attributes to {0, 1}
+        # rescale attributes to {0, 1} and {0, 2}
         node_attr_out = (node_attr_next + 1) / 2
-        edge_node_attr_out = (edge_node_attr_next + 1) / 2
+        edge_node_attr_out = edge_node_attr_next + 1
         edge_attr_out = (edge_attr_next + 1) / 2
 
         return node_attr_out.squeeze(1), edge_node_attr_out.squeeze(1), edge_attr_out.squeeze(1)

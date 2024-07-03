@@ -200,6 +200,7 @@ class Expansion(Method):
         adj = SparseTensor.from_edge_index(
             augmented_edge_index[:, augmented_edge_pred > 0.5],
             sparse_sizes=adj_augmented.sizes(),
+            edge_attr = th.ones(th.sum(augmented_edge_pred > 0.5), device=augmented_edge_pred.device)
         )
         
         all_node_attr = th.zeros(batch.size(0), dtype=th.long, device = node_attr.device)
@@ -220,7 +221,7 @@ class Expansion(Method):
         edge_node_attr = batch.edge_expansion - 1
         augmented_edge_index, edge_val = to_edge_index(adj_augmented + batch.adj)
         augmented_edge_attr = edge_val.long() - 1
-
+        
         # get node embeddings
         if sign_net is not None:
             both_type_node_emb_reduced = sign_net(
@@ -272,7 +273,7 @@ class Expansion(Method):
         }
 
     def get_augmented_hypergraph(self, adj_reduced, expansion_matrix):
-        """Returns the expanded adjacency matrix with additional augmented edges.
+        """Returns the expanded bipartite adjacency matrix with additional augmented edges.
 
         All edge weights are set to 1.
         """
@@ -280,8 +281,6 @@ class Expansion(Method):
         adj_reduced_augmented = adj_reduced.copy()
         
         if self.augmented_radius > 0:
-            adj_reduced_augmented = adj_reduced.copy()
-            
             adj_reduced_square = (adj_reduced @ adj_reduced).set_diag(1)
             for _ in range(1, self.augmented_radius):
                 adj_reduced_augmented = adj_reduced_augmented @ adj_reduced_square
