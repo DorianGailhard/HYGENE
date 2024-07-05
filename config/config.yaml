@@ -40,8 +40,8 @@ training:
 
 validation:
   batch_size: null
-  interval: 50_000
-  first_step: 50_000
+  interval: 500
+  first_step: 500
   per_hypergraph_size: False
 
 testing: False # if True, only evaluate on test set

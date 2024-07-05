@@ -47,7 +47,7 @@ class Expansion(Method):
         node_expansion = th.ones(num_hypergraphs*2, dtype=th.long, device=self.device)
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
-
+        
         while node_type.sum() < target_size.sum():
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
@@ -71,7 +71,7 @@ class Expansion(Method):
             #                 (H^T 0)
             adj = adj.to_dense().cpu().numpy()
             
-            if np.max(adj) > 0. : # Dirty fix
+            if np.max(adj) > 0. :
                 num_hyperedges = adj.shape[0] - n
     
                 incidence_matrix = adj[:n, n:n + num_hyperedges]
@@ -124,6 +124,9 @@ class Expansion(Method):
         node_map = th.repeat_interleave(
             th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
         )
+        
+        print(f"edge_node_expanded : {node_expansion[node_type == 0]}")
+        
         expanded_node_type = node_type[node_map]
         both_type_node_emb = both_type_node_emb_reduced[node_map]
         batch = batch_reduced[node_map]
@@ -280,7 +283,7 @@ class Expansion(Method):
         # construct augmented adjacency matrix
         adj_reduced_augmented = adj_reduced.copy()
         
-        if self.augmented_radius > 0:
+        if self.augmented_radius > 1:
             adj_reduced_square = (adj_reduced @ adj_reduced).set_diag(1)
             for _ in range(1, self.augmented_radius):
                 adj_reduced_augmented = adj_reduced_augmented @ adj_reduced_square

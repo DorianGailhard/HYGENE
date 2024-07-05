@@ -45,7 +45,7 @@ class RandRedDataset(IterableDataset, ABC):
                     else None,
                 )
             )
-            if red.n <= 1:
+            if reduced_hypergraph.n <= 1:
                 break
             red = reduced_hypergraph
 

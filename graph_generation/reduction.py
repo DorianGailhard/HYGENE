@@ -27,6 +27,7 @@ class Reduction(ABC):
         self.bipartite_adj = bipartite_adj
         self.clique_adj = clique_adj
         self.n = self.clique_adj.shape[0]
+        
         self.node_degree = self.clique_adj.sum(0)
         self.lap = sp.sparse.diags(self.node_degree) - self.clique_adj if lap is None else lap
         if B is None:
@@ -48,6 +49,7 @@ class Reduction(ABC):
             else expansion_matrix.sum(0)[self.n:].astype(np.int32)
         )
         self.level = level
+        
 
     def get_reduced_hypergraph(self, rng=np.random.default_rng()):
         # Compute the coarsened clique representation
@@ -318,8 +320,9 @@ class ReductionFactory:
         diag_matrix = sp.sparse.diags(diagonal, offsets=0, shape=clique_adjacency.shape, format='csr')
 
         clique_adjacency = clique_adjacency - diag_matrix
+        clique_adjacency.eliminate_zeros()
 
-        return csr_array(clique_adjacency)
+        return clique_adjacency
     
     
     def __init__(
