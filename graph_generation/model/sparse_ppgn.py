@@ -107,7 +107,7 @@ class SparsePPGN(Module):
             dim=-1,
         )
         x_edge_node = self.dropout(x_edge_node)
-        x_edge_node = self.node_in_mlp(x_edge_node)
+        x_edge_node = self.edge_node_in_mlp(x_edge_node)
         
         
         edge_batch = batch[edge_index[0]]
