@@ -49,7 +49,7 @@ class Reduction(ABC):
             else expansion_matrix.sum(0)[self.n:].astype(np.int32)
         )
         self.level = level
-        
+          
 
     def get_reduced_hypergraph(self, rng=np.random.default_rng()):
         # Compute the coarsened clique representation
@@ -217,7 +217,7 @@ class Reduction(ABC):
                 merged += len(contraction_set)
                 if merged - len(partitions) >= reduction_fraction * self.n:
                     break
-        
+
         # construct projection matrix
         P = eye(self.n, format="lil")
         mask = np.ones(self.n, dtype=bool)

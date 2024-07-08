@@ -172,12 +172,8 @@ class EDM:
         node_loss = weight[batch[node_type == 1]] * (node_pred - node_attr) ** 2
         edge_node_loss = weight[batch[node_type == 0]] * (edge_node_pred - edge_node_attr) ** 2
         edge_loss = weight[edge_batch] * (edge_pred - edge_attr) ** 2
-        
-        node_loss_complete = th.zeros_like(batch).to(th.float)
-        node_loss_complete[node_type == 0] = edge_node_loss
-        node_loss_complete[node_type == 1] = node_loss
 
-        return node_loss_complete, edge_loss
+        return node_loss, edge_node_loss, edge_loss
 
     @th.no_grad()
     def sample(self, edge_index, node_type, batch, model, model_kwargs):

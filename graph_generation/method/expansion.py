@@ -243,12 +243,12 @@ class Expansion(Method):
             )
 
         # reduction fraction
-        size = scatter(th.ones_like(batch.batch), batch.batch)
+        size = scatter(batch.node_type, batch.batch)
         expanded_size = scatter(batch.node_expansion, batch.batch[batch.node_type == 1])
         red_frac = 1 - size / expanded_size
 
         # loss
-        node_loss, edge_loss = self.diffusion.get_loss(
+        node_loss, edge_node_loss, edge_loss = self.diffusion.get_loss(
             edge_index=augmented_edge_index,
             batch=batch.batch,
             node_type=batch.node_type,
@@ -265,12 +265,14 @@ class Expansion(Method):
         )
 
         # ignore node_loss for first level
-        node_loss = node_loss[batch.reduction_level[batch.batch] > 0].mean()
+        node_loss = node_loss[batch.reduction_level[batch.batch[batch.node_type == 1]] > 0].mean()
+        edge_node_loss = edge_node_loss[batch.reduction_level[batch.batch[batch.node_type == 0]] > 0].mean()
         edge_loss = edge_loss.mean()
-        loss = node_loss + edge_loss
+        loss = node_loss + edge_node_loss + edge_loss
 
         return loss, {
             "node_expansion_loss": node_loss.item(),
+            "edge_node_expansion_loss": edge_node_loss.item(),
             "augmented_edge_loss": edge_loss.item(),
             "loss": loss.item(),
         }

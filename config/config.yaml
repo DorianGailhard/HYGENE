@@ -23,7 +23,7 @@ reduction:
   max_red_frac: 0.3
   red_threshold: 16
   num_red_seqs: -1 # infinite
-  rand_lambda: 0.3 # 0 for no randomization
+  rand_lambda: 0.1 # 0 for no randomization
 
 spectral:
   num_features: 2
@@ -40,8 +40,8 @@ training:
 
 validation:
   batch_size: null
-  interval: 500
-  first_step: 500
+  interval: 50_000
+  first_step: 50_000
   per_hypergraph_size: False
 
 testing: False # if True, only evaluate on test set
@@ -59,7 +59,7 @@ sign_net:
   num_layers: 5
 
 ema:
-  betas: [0.99]
+  betas: [0.99, 0.999, 0.9999, 1]
   gamma: 1
   power: 0.67
 

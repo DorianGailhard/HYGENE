@@ -112,24 +112,15 @@ class SparsePPGN(Module):
         
         edge_batch = batch[edge_index[0]]
         
-        # Recover the node indices from the graph node index
-        # This is because the embeddings for each side of the bipartite graph are 
-        # split so the indices in the graph do not directly correspond to the arrays indices
-        ones = th.ones(node_type.size(0), dtype=th.int, device=node_attr.device)
-        
-        cumsum_ones = th.cumsum(ones, dim=0).to(th.int) - 1
-        
-        indices_map = th.zeros_like(batch).to(th.int)
-        indices_map[node_type == 0] = th.sum(node_type).to(th.int).item() + cumsum_ones[:edge_node_attr.size(0)]
-        indices_map[node_type == 1] = cumsum_ones[:node_attr.size(0)]
-        
-        all_nodes_emb = th.cat((node_emb, edge_node_emb), dim=0)
+        all_nodes_emb = th.zeros(node_emb.size(0) + edge_node_emb.size(0), node_emb.size(1), device=node_emb.device)
+        all_nodes_emb[node_type == 0] = edge_node_emb
+        all_nodes_emb[node_type == 1] = node_emb
         
         x_edge = th.cat(
             [
                 edge_attr_emb,
-                all_nodes_emb[indices_map[edge_index[0]]], # Needed here
-                all_nodes_emb[indices_map[edge_index[1]]], # Needed here
+                all_nodes_emb[edge_index[0]], # Needed here
+                all_nodes_emb[edge_index[1]], # Needed here
                 noise_cond_emb[edge_batch],
                 red_frac_emb[edge_batch],
                 target_size_emb[edge_batch],
@@ -150,10 +141,12 @@ class SparsePPGN(Module):
         ].expand(2, -1)
             
         edge_index_ext = th.cat([self_loop_index, edge_index], dim=1)
-        x = th.cat([x_node, x_edge_node, x_edge], dim=0)
+        x = th.zeros(x_node.size(0) + x_edge_node.size(0), x_node.size(1), device=x_node.device)
         
         # Change the indices so they correspond to the indices of the graph
-        x[:node_type.size(0)] = x[indices_map]
+        x[node_type == 0] = x_edge_node
+        x[node_type == 1] = x_node
+        x = th.cat([x, x_edge], dim=0)
 
         n = node_attr.size(0) + edge_node_attr.size(0)
         edge_id = edge_index_ext[0] * n + edge_index_ext[1]
