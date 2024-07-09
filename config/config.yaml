@@ -67,4 +67,4 @@ name: ???
 debugging: False
 
 wandb:
-  logging: False
+  logging: True
