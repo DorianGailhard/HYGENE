@@ -119,8 +119,8 @@ class SparsePPGN(Module):
         x_edge = th.cat(
             [
                 edge_attr_emb,
-                all_nodes_emb[edge_index[0]], # Needed here
-                all_nodes_emb[edge_index[1]], # Needed here
+                all_nodes_emb[edge_index[0]],
+                all_nodes_emb[edge_index[1]],
                 noise_cond_emb[edge_batch],
                 red_frac_emb[edge_batch],
                 target_size_emb[edge_batch],

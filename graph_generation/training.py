@@ -4,6 +4,7 @@ from time import time
 
 import matplotlib.pyplot as plt
 import hypernetx as hnx
+import networkx as nx
 import numpy as np
 import torch as th
 from hydra.core.hydra_config import HydraConfig
@@ -260,7 +261,7 @@ class Trainer:
         pred_perm = self.rng.permutation(np.arange(len(eval_hypergraphs)))
 
         # Select target number of nodes and split into batches
-        target_size = np.array([len(g) for g in eval_hypergraphs])[pred_perm]
+        target_size = np.array([len(g.nodes) for g in eval_hypergraphs])[pred_perm]
         bs = (
             self.cfg.validation.batch_size
             if self.cfg.validation.batch_size is not None
@@ -307,10 +308,30 @@ class Trainer:
         fig, axs = plt.subplots(n, 2, figsize=(50, 50))
         for i in range(n * n):
             H = pred_hypergraphs[i]
-            ax = axs[i // n, i % n]
-            hnx.drawing.rubber_band.draw(H, ax=ax)
-            ax.title.set_text(f"N = {len(H.nodes)}")
-            ax.title.set_fontsize(40)
+            
+            if len(H.nodes) > 1:
+                # Get the associated unweighted clique expansion
+                G = nx.Graph()
+                G.add_nodes_from(H.nodes())
+                for edge in H.edges:
+                    nodes = H.edges[edge]
+                    for k in range(len(nodes)):
+                        for l in range(k+1, len(nodes)):
+                            G.add_edge(nodes[k], nodes[l])
+        
+                # Compute layout via the clique expansion (hnx doesn't have an equivalent ...)
+                pos = nx.spring_layout(G, k=0.5, iterations=50)
+    
+                ax = axs[i // n, i % n]
+                hnx.draw(H, pos=pos, ax=ax)
+                ax.title.set_text(f"N = {len(H.nodes)}")
+                ax.title.set_fontsize(40)
+            else:
+                ax = axs[i // n, i % n]
+                hnx.draw(H, ax=ax)
+                ax.title.set_text(f"N = {len(H.nodes)}")
+                ax.title.set_fontsize(40)
+                
         fig.tight_layout()
         results["examples"] = fig
 

@@ -41,6 +41,7 @@ class Expansion(Method):
         dense_tensor = th.zeros(num_hypergraphs*2, num_hypergraphs*2, device=self.device)
         dense_tensor[th.arange(num_hypergraphs, device=self.device)*2, 1 + th.arange(num_hypergraphs, device=self.device)*2] = 1
         dense_tensor[1 + th.arange(num_hypergraphs, device=self.device)*2, th.arange(num_hypergraphs, device=self.device)*2] = 1
+        
         adj = SparseTensor.from_dense(dense_tensor)
 
         batch = th.repeat_interleave(th.arange(0, num_hypergraphs, device=self.device), 2*th.ones(num_hypergraphs, dtype = th.int32, device=self.device))
@@ -58,9 +59,10 @@ class Expansion(Method):
                 model=model,
                 sign_net=sign_net,
             )
-            if node_expansion[node_type == 1].max() <= 1:
+            #if node_expansion[node_type == 1].max() <= 1:
+            if node_type.size(0) >= 100:
                 break
-
+                
         # return hypergraphs
         adjs, num_nodes = unbatch_adj(adj, batch, node_type)
         hypergraphs = []
@@ -98,6 +100,24 @@ class Expansion(Method):
         """Expands a hypergraph by a single level."""
         reduced_size = scatter(node_type, batch_reduced)
 
+        # expand
+        # don't expand hypergraphs reached their target size
+        node_expansion[(reduced_size >= target_size)[batch_reduced]] = 1
+        node_map = th.repeat_interleave(
+            th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
+        )
+        
+        expanded_node_type = node_type[node_map]
+        batch = batch_reduced[node_map]
+        size = scatter(expanded_node_type, batch)
+        expansion_matrix = SparseTensor(
+            row=th.arange(node_map.size(0), device=self.device),
+            col=node_map,
+            value=th.ones(node_map.size(0), device=self.device),
+        )
+        adj_augmented = self.get_augmented_hypergraph(adj_reduced, expansion_matrix)
+        augmented_edge_index = th.stack(adj_augmented.coo()[:2], dim=0)
+        
         # get node embeddings
         if self.spectrum_extractor is not None:
             spectral_features = th.cat(
@@ -113,31 +133,17 @@ class Expansion(Method):
             both_type_node_emb_reduced = sign_net(
                 spectral_features=spectral_features, edge_index=adj_reduced
             )
+            
+            node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 1], expansion_matrix.sum(0)[node_type == 1].to(th.int), dim=0)
+            edge_node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 0], expansion_matrix.sum(0)[node_type == 0].to(th.int), dim=0)
         else:
-            both_type_node_emb_reduced = th.randn(
-                adj_reduced.size(0), self.emb_features, device=self.device
-            )
-
-        # expand
-        # don't expand hypergraphs reached their target size
-        node_expansion[(reduced_size >= target_size)[batch_reduced]] = 1
-        node_map = th.repeat_interleave(
-            th.arange(0, adj_reduced.size(0), device=self.device), node_expansion
-        )
-        
-        print(f"edge_node_expanded : {node_expansion[node_type == 0]}")
-        
-        expanded_node_type = node_type[node_map]
-        both_type_node_emb = both_type_node_emb_reduced[node_map]
-        batch = batch_reduced[node_map]
-        size = scatter(expanded_node_type, batch)
-        expansion_matrix = SparseTensor(
-            row=th.arange(node_map.size(0), device=self.device),
-            col=node_map,
-            value=th.ones(node_map.size(0), device=self.device),
-        )
-        adj_augmented = self.get_augmented_hypergraph(adj_reduced, expansion_matrix)
-        augmented_edge_index = th.stack(adj_augmented.coo()[:2], dim=0)
+            node_emb = th.repeat_interleave(th.randn(
+                node_type.sum(), self.emb_features, device=self.device
+            ), expansion_matrix.sum(0)[node_type == 1].to(th.int), dim=0)
+            
+            edge_node_emb = th.repeat_interleave(th.randn(
+                node_type.size(0) - node_type.sum(), self.emb_features, device=self.device
+            ), expansion_matrix.sum(0)[node_type == 0].to(th.int), dim=0)
         
         # compute number of nodes in expanded hypergraph
         random_reduction_fraction = (
@@ -170,8 +176,8 @@ class Expansion(Method):
             node_type=expanded_node_type,
             model=model,
             model_kwargs={
-                "node_emb": both_type_node_emb[expanded_node_type == 1],
-                "edge_node_emb": both_type_node_emb[expanded_node_type == 0],
+                "node_emb": node_emb,
+                "edge_node_emb": edge_node_emb,
                 "red_frac": 1 - size / expanded_size,
                 "target_size": target_size.float(),
             },
@@ -209,7 +215,7 @@ class Expansion(Method):
         all_node_attr = th.zeros(batch.size(0), dtype=th.long, device = node_attr.device)
         all_node_attr[expanded_node_type == 0] = edge_node_attr
         all_node_attr[expanded_node_type == 1] = node_attr
-
+        
         return adj, batch, all_node_attr + 1, expanded_node_type
 
     def get_loss(self, batch, model: Module, sign_net: Module):

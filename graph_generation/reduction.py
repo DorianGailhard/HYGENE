@@ -213,7 +213,7 @@ class Reduction(ABC):
             if (
                 not marked[contraction_set].any()
                 and rng.uniform() >= self.rand_lambda  # randomize
-            ):
+            ) or len(partitions) == 0:
                 index_map_contraction_set = index_map[contraction_set]
                 
                 # Merge the nodes, then merge the edges                

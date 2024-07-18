@@ -23,7 +23,7 @@ reduction:
   max_red_frac: 0.3
   red_threshold: 16
   num_red_seqs: -1 # infinite
-  rand_lambda: 0.1 # 0 for no randomization
+  rand_lambda: 0.3 # 0 for no randomization
 
 spectral:
   num_features: 2

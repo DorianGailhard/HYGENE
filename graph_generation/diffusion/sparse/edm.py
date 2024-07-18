@@ -138,7 +138,7 @@ class EDM:
         node_attr = node_attr.float() * 2 - 1
         edge_node_attr = edge_node_attr.float() - 1
         edge_attr = edge_attr.float() * 2 - 1
-
+        
         # sample noise level
         num_graphs = batch.max().item() + 1
         rnd_normal = th.randn((num_graphs,), device=self.device)
@@ -172,7 +172,7 @@ class EDM:
         node_loss = weight[batch[node_type == 1]] * (node_pred - node_attr) ** 2
         edge_node_loss = weight[batch[node_type == 0]] * (edge_node_pred - edge_node_attr) ** 2
         edge_loss = weight[edge_batch] * (edge_pred - edge_attr) ** 2
-
+            
         return node_loss, edge_node_loss, edge_loss
 
     @th.no_grad()
