@@ -10,10 +10,10 @@ dataset:
   name: hypergraphErdosRenyi
 
 training:
-  batch_size: 64
+  batch_size: 32
 
 validation:
-  batch_size: 15
+  batch_size: 10
 
 spectral:
   num_features: 2
