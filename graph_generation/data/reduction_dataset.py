@@ -18,8 +18,9 @@ class RandRedDataset(IterableDataset, ABC):
         self.hypergraphs = hypergraphs
         self.spectrum_extractor = spectrum_extractor
 
-    def get_random_reduction_sequence(self, red, rng):
+    def get_random_reduction_sequence(self, reduction_level_zero, rng):
         data = []
+        red = reduction_level_zero
         while True:
             reduced_hypergraph = red.get_reduced_hypergraph(rng)
             
@@ -31,7 +32,7 @@ class RandRedDataset(IterableDataset, ABC):
             
             data.append(
                 ReducedGraphData(
-                    target_size=red.n,
+                    target_size=reduction_level_zero.n,
                     reduction_level=red.level,
                     adj=red.bipartite_adj.astype(bool).astype(np.float32),
                     node_type=node_type,

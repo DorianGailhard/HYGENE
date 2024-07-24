@@ -30,7 +30,7 @@ spectral:
   normalized_laplacian: True
 
 training:
-  batch_size: 64
+  batch_size: 5
   lr: 1e-4
   num_steps: -1 # infinite
   max_num_workers: 10
@@ -59,7 +59,7 @@ sign_net:
   num_layers: 5
 
 ema:
-  betas: [0.99, 0.999, 0.9999, 1]
+  betas: [0.99]
   gamma: 1
   power: 0.67
 

@@ -8,6 +8,8 @@ import numpy as np
 
 from .method import Method
 
+import networkx as nx
+
 
 class Expansion(Method):
     """Hypergraph generation method generating graphs by local expansion."""
@@ -59,8 +61,7 @@ class Expansion(Method):
                 model=model,
                 sign_net=sign_net,
             )
-            #if node_expansion[node_type == 1].max() <= 1:
-            if node_type.size(0) >= 100:
+            if node_expansion.max() <= 1:
                 break
                 
         # return hypergraphs
@@ -73,7 +74,7 @@ class Expansion(Method):
             #                 (H^T 0)
             adj = adj.to_dense().cpu().numpy()
             
-            if np.max(adj) > 0. :
+            if np.max(adj) > 0.:
                 num_hyperedges = adj.shape[0] - n
     
                 incidence_matrix = adj[:n, n:n + num_hyperedges]
@@ -133,17 +134,14 @@ class Expansion(Method):
             both_type_node_emb_reduced = sign_net(
                 spectral_features=spectral_features, edge_index=adj_reduced
             )
-            
-            node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 1], expansion_matrix.sum(0)[node_type == 1].to(th.int), dim=0)
-            edge_node_emb = th.repeat_interleave(both_type_node_emb_reduced[node_type == 0], expansion_matrix.sum(0)[node_type == 0].to(th.int), dim=0)
         else:
-            node_emb = th.repeat_interleave(th.randn(
-                node_type.sum(), self.emb_features, device=self.device
-            ), expansion_matrix.sum(0)[node_type == 1].to(th.int), dim=0)
+            both_type_node_emb_reduced = th.randn(
+                node_type.size(0), self.emb_features, device=self.device
+            )
             
-            edge_node_emb = th.repeat_interleave(th.randn(
-                node_type.size(0) - node_type.sum(), self.emb_features, device=self.device
-            ), expansion_matrix.sum(0)[node_type == 0].to(th.int), dim=0)
+        both_type_node_emb = both_type_node_emb_reduced[node_map]
+        node_emb = both_type_node_emb[expanded_node_type == 1]
+        edge_node_emb = both_type_node_emb[expanded_node_type == 0]
         
         # compute number of nodes in expanded hypergraph
         random_reduction_fraction = (
@@ -220,6 +218,10 @@ class Expansion(Method):
 
     def get_loss(self, batch, model: Module, sign_net: Module):
         """Returns a weighted sum of the node and edge expansion loss and the augmented edge loss."""
+        node_map = th.repeat_interleave(
+            th.arange(0, batch.adj_reduced.size(0), device=self.device), batch.expansion_matrix.sum(0).long()
+        )
+        
         # get augmented hypergraph
         adj_augmented = self.get_augmented_hypergraph(
             batch.adj_reduced, batch.expansion_matrix
@@ -237,17 +239,15 @@ class Expansion(Method):
                 spectral_features=batch.spectral_features_reduced,
                 edge_index=batch.adj_reduced,
             )
-            
-            node_emb = th.repeat_interleave(both_type_node_emb_reduced[batch.node_type_reduced == 1], batch.expansion_matrix.sum(0)[batch.node_type_reduced == 1].to(th.int), dim=0)
-            edge_node_emb = th.repeat_interleave(both_type_node_emb_reduced[batch.node_type_reduced == 0], batch.expansion_matrix.sum(0)[batch.node_type_reduced == 0].to(th.int), dim=0) 
         else:
-            node_emb = th.randn(
-                batch.target_size.sum(), self.emb_features, device=self.device
-            )
-            edge_node_emb = th.randn(
-                adj_augmented.size(0) - batch.target_size.sum(), self.emb_features, device=self.device
-            )
-
+            both_type_node_emb_reduced = th.randn(
+                batch.node_type.size(0), self.emb_features, device=self.device
+            ) 
+                    
+        both_type_node_emb = both_type_node_emb_reduced[node_map]
+        node_emb = both_type_node_emb[batch.node_type == 1]
+        edge_node_emb = both_type_node_emb[batch.node_type == 0]
+            
         # reduction fraction
         size = scatter(batch.node_type, batch.batch)
         expanded_size = scatter(batch.node_expansion, batch.batch[batch.node_type == 1])
@@ -275,7 +275,7 @@ class Expansion(Method):
         edge_node_loss = edge_node_loss[batch.reduction_level[batch.batch[batch.node_type == 0]] > 0].mean()
         edge_loss = edge_loss.mean()
         loss = node_loss + edge_node_loss + edge_loss
-
+            
         return loss, {
             "node_expansion_loss": node_loss.item(),
             "edge_node_expansion_loss": edge_node_loss.item(),
@@ -307,20 +307,24 @@ class Expansion(Method):
         )
         
         # drop out edges
-        if self.augmented_dropout > 0.0:
-            row, col, val = adj_augmented.coo()
-            edge_mask = th.rand_like(val) >= self.augmented_dropout
-            edge_mask = edge_mask | (val > 1)  # keep required edges
-            # make undirected
-            edge_mask = edge_mask & (row < col)
-            edge_index = th.stack([row[edge_mask], col[edge_mask]], dim=0)
-            edge_index = th.cat([edge_index, edge_index.flip(0)], dim=1)
-            adj_augmented = SparseTensor.from_edge_index(
-                edge_index,
-                edge_attr=th.ones(edge_index.shape[1], device=self.device),
-                sparse_sizes=adj_augmented.sizes(),
-            )
-            
+        if self.augmented_radius > 1:
+            if self.augmented_dropout > 0.0:
+                row, col, val = adj_augmented.coo()
+                edge_mask = th.rand_like(val) >= self.augmented_dropout
+                edge_mask = edge_mask | (val > 1)  # keep required edges
+                
+                # make undirected
+                edge_mask = edge_mask & (row < col)
+                edge_index = th.stack([row[edge_mask], col[edge_mask]], dim=0)
+                edge_index = th.cat([edge_index, edge_index.flip(0)], dim=1)
+                adj_augmented = SparseTensor.from_edge_index(
+                    edge_index,
+                    edge_attr=th.ones(edge_index.shape[1], device=self.device),
+                    sparse_sizes=adj_augmented.sizes(),
+                )
+            else:
+                adj_augmented.values().fill_(1)
+                
         return adj_augmented
 
 

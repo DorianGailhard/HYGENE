@@ -4,7 +4,7 @@ from typing import Sequence
 import numpy as np
 import scipy as sp
 from numpy.typing import NDArray
-from scipy.sparse import coo_array, csr_array, eye, hstack, vstack, diags, csc_matrix, bmat
+from scipy.sparse import coo_array, csr_array, eye, hstack, vstack, diags, csc_array, bmat
 
 import hypernetx as hnx
 
@@ -53,7 +53,7 @@ class Reduction(ABC):
 
     def get_reduced_hypergraph(self, rng=np.random.default_rng()):
         # Compute the coarsened clique representation
-        C, coarsened_incidence, edge_lifting_matrix = self.get_coarsening_matrix(rng)
+        C, collapsed_coarsened_incidence, edge_lifting_matrix = self.get_coarsening_matrix(rng)
         
         # P_inv = C.T with all non-zero entries set to 1
         P_inv = C.T.astype(bool).astype(C.dtype)
@@ -74,19 +74,17 @@ class Reduction(ABC):
             )
             
         # Reconstruct the bipartite adjacency matrix
-        collapsed_coarsened_incidence = csr_array(coarsened_incidence)
-        
         num_nodes, num_hyperedges = collapsed_coarsened_incidence.shape
         
-        zero_nodes = csr_array((num_nodes, num_nodes))
-        zero_hyperedges = csr_array((num_hyperedges, num_hyperedges))
+        zero_nodes = csc_array((num_nodes, num_nodes))
+        zero_hyperedges = csc_array((num_hyperedges, num_hyperedges))
         
         top = hstack([zero_nodes, collapsed_coarsened_incidence])
         bottom = hstack([collapsed_coarsened_incidence.T, zero_hyperedges])
-        bipartite_adjacency = csr_array(vstack([top, bottom]))
+        bipartite_adjacency = csc_array(vstack([top, bottom]))
         
         # Add the edge_lifting_matrix to the expansion matrix
-        expansion_matrix = bmat([[P_inv, None], [None, edge_lifting_matrix]])
+        expansion_matrix = bmat([[P_inv, None], [None, edge_lifting_matrix]], format='coo')
         
         return self.__class__(
             bipartite_adj=bipartite_adjacency,
@@ -122,63 +120,48 @@ class Reduction(ABC):
         d_inv_sqrt[mask] = 0
         return self.B @ np.diag(d_inv_sqrt) @ V
     
-    def collapse_duplicate_edges(self, coarsened_incidence: csr_array, edge_lifting_matrix: coo_array):
-        # Convert the matrix to CSC format for efficient column operations
-        csc_matrix_form = csc_matrix(coarsened_incidence)
-        
-        # Create a dictionary to store unique columns and their counts
+    def collapse_duplicate_edges(self, coarsened_incidence: csc_array, edge_lifting_matrix: csc_array):
         unique_columns = {}
         column_map = {}
         next_col_index = 0
         mergings = {}
-        
-        # Create a dictionary to store the non-zero rows for each column of edge_lifting_matrix
-        edge_lifting_dict = {}
-        for row, col in zip(edge_lifting_matrix.row, edge_lifting_matrix.col):
-            if col not in edge_lifting_dict:
-                edge_lifting_dict[col] = []
-            edge_lifting_dict[col].append(row)
-        
+    
         # Iterate through each column
-        for col_index in range(csc_matrix_form.shape[1]):
-            # Extract the column as a tuple of (row_index, data)
-            col_data = tuple(zip(csc_matrix_form[:, col_index].indices, csc_matrix_form[:, col_index].data))
-        
-            if col_data in unique_columns:
-                mergings[unique_columns[col_data]].extend(edge_lifting_dict.get(col_index, []))
+        for col_index in range(coarsened_incidence.shape[1]):
+            # Extract the column indices
+            start, end = coarsened_incidence.indptr[col_index], coarsened_incidence.indptr[col_index + 1]
+            col = tuple(coarsened_incidence.indices[start:end])
+    
+            if col in unique_columns:
+                start_lifting, end_lifting = edge_lifting_matrix.indptr[col_index], edge_lifting_matrix.indptr[col_index+1]
+                mergings[unique_columns[col]].extend(edge_lifting_matrix.indices[start_lifting:end_lifting])
             else:
-                unique_columns[col_data] = next_col_index
+                unique_columns[col] = next_col_index
                 column_map[col_index] = next_col_index
-                mergings[next_col_index] = edge_lifting_dict.get(col_index, [])
+                
+                start_lifting, end_lifting = edge_lifting_matrix.indptr[col_index], edge_lifting_matrix.indptr[col_index+1]
+                mergings[next_col_index] = list(edge_lifting_matrix.indices[start_lifting:end_lifting])
                 next_col_index += 1
+    
+        # Construct the collapsed incidence matrix
+        incidence_collapsed_rows = []
+        incidence_collapsed_indptr = np.zeros(next_col_index+1, dtype=int)
         
-        # Construct the collapsed matrix
-        collapsed_data = []
-        collapsed_rows = []
-        collapsed_cols = []
-        for original_col_index, new_col_index in column_map.items():
-            col = csc_matrix_form[:, original_col_index]
-            collapsed_data.extend(col.data)
-            collapsed_rows.extend(col.indices)
-            collapsed_cols.extend([new_col_index] * len(col.data))
+        lifting_collapsed_rows = []
+        lifting_collapsed_indptr = np.zeros(next_col_index+1, dtype=int)
         
-        # Create the collapsed matrix
-        collapsed_matrix = csr_array((collapsed_data, (collapsed_rows, collapsed_cols)), shape=(coarsened_incidence.shape[0], next_col_index))
+        for col, idx in unique_columns.items():
+            incidence_collapsed_rows.extend(col)
+            incidence_collapsed_indptr[idx+1:] += len(col)
+            
+            lifting_collapsed_rows.extend(mergings[idx])
+            lifting_collapsed_indptr[idx+1:] += len(mergings[idx])
         
-        # Create the edge lifting matrix
-        rows = []
-        cols = []
-        
-        for col_idx, node_indices in mergings.items():
-            for node_idx in node_indices:
-                cols.append(col_idx)
-                rows.append(node_idx)
-        
-        data = np.ones(len(rows))
-        
-        lifting_matrix = coo_array((data, (rows, cols)), shape=(edge_lifting_matrix.shape[0], len(unique_columns)))
-        
-        return collapsed_matrix, lifting_matrix
+        # Create the collapsed matrices
+        collapsed_incidence_matrix = csc_array((np.ones(incidence_collapsed_indptr[-1], dtype=int), incidence_collapsed_rows, incidence_collapsed_indptr), shape=(coarsened_incidence.shape[0], next_col_index))
+        collapsed_lifting_matrix = csc_array((np.ones(lifting_collapsed_indptr[-1], dtype=int), lifting_collapsed_rows, lifting_collapsed_indptr), shape=(edge_lifting_matrix.shape[0], next_col_index))
+    
+        return collapsed_incidence_matrix, collapsed_lifting_matrix
     
 
     def get_coarsening_matrix(self, rng) -> coo_array:
@@ -202,8 +185,8 @@ class Reduction(ABC):
         partitions = []
         marked = np.zeros(self.n, dtype=bool)
         
-        incidence_matrix = self.bipartite_adj [:self.n, self.n:]
-        edge_lifting_matrix = eye(incidence_matrix.shape[1], format='coo')
+        incidence_matrix = csc_array(self.bipartite_adj [:self.n, self.n:])
+        edge_lifting_matrix = eye(incidence_matrix.shape[1], format='csc')
         
         # As we dynamically reduce the incidence matrix, the indices in the
         # contraction_set do not correspond to those of the matrix
@@ -213,34 +196,30 @@ class Reduction(ABC):
             if (
                 not marked[contraction_set].any()
                 and rng.uniform() >= self.rand_lambda  # randomize
-            ) or len(partitions) == 0:
+            ):
                 index_map_contraction_set = index_map[contraction_set]
                 
-                # Merge the nodes, then merge the edges                
-                # Sum all rows in contraction_set, corresponding to the super node
-                combined_row = incidence_matrix[index_map_contraction_set].max(axis=0)
+                # Merge the nodes              
+                row_map = np.arange(incidence_matrix.shape[0])
+                for idx in index_map_contraction_set[1:]: row_map[idx:] -= 1
+                row_map[index_map_contraction_set] = index_map_contraction_set[0] # Sum on the first contraction index
                 
-                # We discard the rows of the merged nodes, keeping only the first index as the sum
-                rows_to_keep = [i for i in range(incidence_matrix.shape[0]) if i not in index_map_contraction_set[1:]]
-                new_data = []
+                new_indices = row_map[incidence_matrix.indices]
+                
                 new_indices = []
-                new_indptr = [0]
+                new_indptr = np.zeros(incidence_matrix.shape[1]+1, dtype=int)
                 
-                for i, row in enumerate(rows_to_keep):
-                    if row == index_map_contraction_set[0]:
-                        new_data.extend(combined_row.data)
-                        new_indices.extend(combined_row.col)
-                    else:
-                        start, end = incidence_matrix.indptr[row], incidence_matrix.indptr[row + 1]
-                        new_data.extend(incidence_matrix.data[start:end])
-                        new_indices.extend(incidence_matrix.indices[start:end])
-                    new_indptr.append(len(new_indices))
-    
-                coarsened_incidence = csr_array((new_data, new_indices, new_indptr), 
-                             shape=(len(rows_to_keep), incidence_matrix.shape[1]))
+                for i in range(incidence_matrix.shape[1]):
+                    start, end = incidence_matrix.indptr[i], incidence_matrix.indptr[i+1]
+                    coarsened_indices = np.unique(row_map[incidence_matrix.indices[start:end]])
+                    new_indices.extend(coarsened_indices)
+                    new_indptr[i+1:] += len(coarsened_indices)
                 
+                coarsened_incidence = csc_array((np.ones(new_indptr[-1], dtype=int), new_indices, new_indptr), shape=(incidence_matrix.shape[0] - len(index_map_contraction_set)+1, incidence_matrix.shape[1]))
+                
+                # Then merge the hyperedges  
                 collapsed_coarsened_incidence, new_edge_lifting_matrix = self.collapse_duplicate_edges(coarsened_incidence, edge_lifting_matrix)
-                
+
                 if new_edge_lifting_matrix.sum(0).max() <= 3:
                     incidence_matrix = collapsed_coarsened_incidence
                     edge_lifting_matrix = new_edge_lifting_matrix
