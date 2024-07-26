@@ -1,6 +1,7 @@
 from itertools import combinations
 import hypernetx as hnx
 import numpy as np
+import random
     
 def generate_sbm_hypergraphs(num_hypergraphs, min_size, max_size, p, q, k, seed=0):
     """Generate SBM hypergraphs."""
@@ -62,4 +63,36 @@ def generate_erdos_renyi_hypergraphs(num_hypergraphs, min_size, max_size, probs,
             if H.is_connected():
                 hypergraphs.append(H)
 
+    return hypergraphs
+
+
+def generate_ego_hypergraph(num_hypergraphs, min_size, max_size, num_edges, max_edge_size, seed=0):
+    """Generate random Ego hypergraphs."""
+    rng = np.random.default_rng(seed)
+    hypergraphs = []
+    
+    while len(hypergraphs) < num_hypergraphs:
+        num_nodes = rng.integers(min_size, max_size, endpoint=True)
+        # Generate a random graph
+        nodes = range(num_nodes)
+        edges = {}
+        for i in range(num_edges):
+            edge_size = random.randint(2, min(max_edge_size, num_nodes))
+            edge_nodes = random.sample(nodes, edge_size)
+            edges[i] = edge_nodes
+
+        H = hnx.Hypergraph(edges)
+
+        # Generate the ego hypergraph
+        ego_node = random.choice(list(H.nodes))
+
+        ego_edges = {}
+        for edge in H.edges:
+            if ego_node in H.edges[edge]:
+                ego_edges[edge] = list(H.edges[edge])
+                
+        if H.is_connected():
+            H = hnx.Hypergraph(ego_edges)
+            hypergraphs.append(H)
+                
     return hypergraphs

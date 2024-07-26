@@ -1,0 +1,6 @@
+name: hypergraphEgo
+min_size: 150
+max_size: 200
+num_edges: 3000
+max_edge_size: 5
+load: true

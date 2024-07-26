@@ -220,21 +220,13 @@ class Trainer:
         for beta in self.cfg.ema.betas:
             val_results[f"ema_{beta}"] = self.evaluate(self.validation_hypergraphs, beta)
 
-            """# Compute validation score
-            unique_novel_valid_keys = [
-                str(m) for m in self.metrics if "UniqueNovelValid" in str(m)
-            ]
-            if len(unique_novel_valid_keys) > 0:
-                validation_score = val_results[f"ema_{beta}"][
-                    unique_novel_valid_keys[0]
-                ]
-            else:
-                validation_score = 1 / val_results[f"ema_{beta}"]["Ratio"]
+            # Compute spectral fidelity
+            validation_score = 1 / val_results[f"ema_{beta}"]["Spectral"]
 
-            # Evaluate on test set if validation score improved
+            # Evaluate on test set if spectral fidelity improved
             if validation_score >= self.best_validation_scores[beta]:
                 self.best_validation_scores[beta] = validation_score
-                test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)"""
+                test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)
 
         # Log results
         self.log({"validation": val_results, "test": test_results})

@@ -190,15 +190,15 @@ def main(cfg: DictConfig):
         gg.metrics.NodeDegreeDistrWasserstein(),
         gg.metrics.EdgeSizeDistrWasserstein(),
         gg.metrics.Spectral(),
+        gg.metrics.CentralityCloseness(),
+        gg.metrics.CentralityBetweenness(),
+        gg.metrics.CentralityHarmonic(),
         gg.metrics.Uniqueness(),
         gg.metrics.Novelty(),
     ]
 
-    if "hypergraphSBM" in cfg.dataset.name:
-        validation_metrics += [
-        ]
-    elif "hypergraphErdosRenyi" in cfg.dataset.name:
-        validation_metrics += [
+    if "hypergraphEgo" in cfg.dataset.name:
+        validation_metrics += [gg.metrics.ValidEgo(),
         ]
 
     # Method

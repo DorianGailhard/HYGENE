@@ -19,8 +19,8 @@ reduction:
   preserved_eig_size: 8
   sqrt_partition_size: True
   weighted_reduction: True
-  min_red_frac: 0.1
-  max_red_frac: 0.3
+  min_red_frac: 0.2
+  max_red_frac: 0.5
   red_threshold: 16
   num_red_seqs: -1 # infinite
   rand_lambda: 0.3 # 0 for no randomization
@@ -40,8 +40,8 @@ training:
 
 validation:
   batch_size: null
-  interval: 50_000
-  first_step: 50_000
+  interval: 100_000
+  first_step: 100_000
   per_hypergraph_size: False
 
 testing: False # if True, only evaluate on test set

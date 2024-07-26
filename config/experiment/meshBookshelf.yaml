@@ -10,10 +10,10 @@ dataset:
   name: meshBookshelf
 
 training:
-  batch_size: 5
+  batch_size: 16
 
 validation:
-  batch_size: 1
+  batch_size: 32
 
 spectral:
   num_features: 0
