@@ -1,4 +1,4 @@
-name: graph-generation
+name: hypergraph-generation
 channels:
   - pytorch
   - pyg
@@ -273,4 +273,6 @@ dependencies:
   - zstd=1.5.6=ha6fb4c9_0
   - pip
   - pip:
+    - hypernetx
+    - platformdirs
     - -e .

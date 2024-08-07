@@ -13,7 +13,7 @@ training:
   batch_size: 64
 
 validation:
-  batch_size: 128
+  batch_size: 20
 
 spectral:
-  num_features: 2
+  num_features: 0

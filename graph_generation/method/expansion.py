@@ -8,8 +8,6 @@ import numpy as np
 
 from .method import Method
 
-import networkx as nx
-
 
 class Expansion(Method):
     """Hypergraph generation method generating graphs by local expansion."""
@@ -120,6 +118,7 @@ class Expansion(Method):
         augmented_edge_index = th.stack(adj_augmented.coo()[:2], dim=0)
         
         # get node embeddings
+        print(f"size : {scatter(th.ones_like(batch), batch)}")
         if self.spectrum_extractor is not None:
             spectral_features = th.cat(
                 [

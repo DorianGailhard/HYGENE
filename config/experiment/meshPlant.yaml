@@ -10,10 +10,10 @@ dataset:
   name: meshPlant
 
 training:
-  batch_size: 16
+  batch_size: 10
 
 validation:
-  batch_size: 32
+  batch_size: 6
 
 spectral:
-  num_features: 0
+  num_features: 2

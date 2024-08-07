@@ -12,6 +12,8 @@ from util.eval_helper import (
     spectral_stats,
     eval_fraction_unique,
     eval_fraction_isomorphic,
+    eval_acc_tree_hypergraph,
+    eval_acc_sbm_hypergraph,
 )
 
 @dataclass
@@ -232,3 +234,19 @@ class ValidEgo(Metric):
                 valid += 1
         
         return valid/len(predicted_hypergraphs)
+    
+
+class ValidHypertree(Metric):
+    def __str__(self):
+        return "ValidHypertree"
+
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
+        return eval_acc_tree_hypergraph(predicted_hypergraphs)
+    
+
+class ValidSBM(Metric):
+    def __str__(self):
+        return "ValidSBM"
+
+    def __call__(self, reference_hypergraphs, predicted_hypergraphs, train_hypergraphs):
+        return eval_acc_sbm_hypergraph(predicted_hypergraphs)

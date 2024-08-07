@@ -200,6 +200,14 @@ def main(cfg: DictConfig):
     if "hypergraphEgo" in cfg.dataset.name:
         validation_metrics += [gg.metrics.ValidEgo(),
         ]
+        
+    if "hypergraphTree" in cfg.dataset.name:
+        validation_metrics += [gg.metrics.ValidHypertree(),
+        ]
+        
+    if "hypergraphSBM" in cfg.dataset.name:
+        validation_metrics += [gg.metrics.ValidSBM(),
+        ]
 
     # Method
     if cfg.method.name == "expansion":

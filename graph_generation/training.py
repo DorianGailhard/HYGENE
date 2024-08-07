@@ -77,7 +77,7 @@ class Trainer:
         }
 
         # checkpoint dir
-        self.output_dir = Path(HydraConfig.get().runtime.output_dir)
+        self.output_dir = Path('/home/ids/gailhard/SODA_Hypergraph-generation/outputs/2024-07-31/11-16-17') # Path(HydraConfig.get().runtime.output_dir)
 
         # Resume from checkpoint
         if cfg.training.resume:
@@ -169,7 +169,7 @@ class Trainer:
                     th.cuda.empty_cache()
 
                 self.run_validation()
-
+                
                 if self.cfg.training.save_checkpoint:
                     self.save_checkpoint()
 

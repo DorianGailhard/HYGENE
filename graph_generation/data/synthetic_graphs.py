@@ -1,4 +1,5 @@
 from itertools import combinations
+import networkx as nx
 import hypernetx as hnx
 import numpy as np
 import random
@@ -95,4 +96,53 @@ def generate_ego_hypergraph(num_hypergraphs, min_size, max_size, num_edges, max_
             H = hnx.Hypergraph(ego_edges)
             hypergraphs.append(H)
                 
+    return hypergraphs
+
+
+def generate_hypertrees(num_hypergraphs, min_size, max_size, p, k, seed=0):
+    """Generate hypertrees by merging connected edges."""
+    rng = np.random.default_rng(seed)
+    hypergraphs = []
+    
+    while len(hypergraphs) < num_hypergraphs:
+        # Generate a random tree
+        num_nodes = rng.integers(min_size, max_size, endpoint=True)
+        T = nx.random_labeled_tree(n=num_nodes, seed=rng)
+        
+        # Initialize the hyperedges list
+        hyperedges = []
+        
+        # Start with all edges as potential hyperedges
+        potential_edges = list(T.edges())
+        
+        while potential_edges:
+            # Start with a random edge
+            current_edge = potential_edges.pop(rng.integers(len(potential_edges)))
+            hyperedge = set(current_edge)
+            
+            # Grow the hyperedge
+            while len(hyperedge) < k and potential_edges:
+                # Find edges connected to the current hyperedge
+                connected_edges = [e for e in potential_edges if set(e) & hyperedge]
+                
+                if not connected_edges:
+                    break
+                
+                # Randomly choose a connected edge to add
+                if rng.random() < p:
+                    new_edge = connected_edges[rng.integers(len(connected_edges))]
+                    hyperedge.update(new_edge)
+                    potential_edges.remove(new_edge)
+                else:
+                    break
+            
+            hyperedges.append(hyperedge)
+        
+        # Add any remaining edges as hyperedges
+        hyperedges.extend([set(e) for e in potential_edges])
+        
+        # Create a Hypergraph object
+        H = hnx.Hypergraph(hyperedges)
+        hypergraphs.append(H)
+    
     return hypergraphs
