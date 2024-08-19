@@ -4,6 +4,7 @@ channels:
   - pyg
   - nvidia
   - conda-forge
+  - defaults
 dependencies:
   - _libgcc_mutex=0.1=conda_forge
   - _openmp_mutex=4.5=2_kmp_llvm
@@ -271,8 +272,8 @@ dependencies:
   - zlib=1.2.13=hd590300_5
   - zstandard=0.19.0=py310h5764c6d_0
   - zstd=1.5.6=ha6fb4c9_0
-  - pip
   - pip:
-    - hypernetx
-    - platformdirs
-    - -e .
+      - platformdirs==4.2.2
+      - pytz==2024.1
+      - hypernetx==2.3.5
+      - -e .

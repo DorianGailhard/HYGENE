@@ -229,9 +229,9 @@ class Reduction(ABC):
                     # Update the index map
                     for idx in contraction_set[1:]:
                         index_map[idx:] -= 1
-                        
-                if marked.sum() - len(partitions) >= reduction_fraction * self.n:
-                    break
+                            
+                    if marked.sum() - len(partitions) >= reduction_fraction * self.n:
+                        break
 
         # construct projection matrix
         P = eye(self.n, format="lil")

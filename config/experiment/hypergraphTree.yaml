@@ -10,10 +10,10 @@ dataset:
   name: hypergraphTree
 
 training:
-  batch_size: 16
+  batch_size: 32
 
 validation:
-  batch_size: 16
+  batch_size: 20
 
 spectral:
-  num_features: 0
+  num_features: 2

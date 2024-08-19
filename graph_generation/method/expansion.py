@@ -49,7 +49,7 @@ class Expansion(Method):
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
         
-        while node_type.sum() < target_size.sum():
+        while node_type.sum() < target_size.sum() and node_type.size(0) < 2500:
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
                 batch,
@@ -118,7 +118,6 @@ class Expansion(Method):
         augmented_edge_index = th.stack(adj_augmented.coo()[:2], dim=0)
         
         # get node embeddings
-        print(f"size : {scatter(th.ones_like(batch), batch)}")
         if self.spectrum_extractor is not None:
             spectral_features = th.cat(
                 [

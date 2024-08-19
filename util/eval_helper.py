@@ -16,6 +16,7 @@ import networkx as nx
 import math
 from scipy.stats import chi2
 import graph_tool.all as gt
+from functools import lru_cache
 
 PRINT_TIME = False
 __all__ = [
@@ -352,18 +353,19 @@ def eval_acc_tree_hypergraph(H_list):
 
 ###############################################################################
 
+@lru_cache(maxsize=None)
+def compute_sorted_spectrum(hg):
+    """Compute and sort the singular values of a hypergraph's incidence matrix."""
+    inc = hg.incidence_matrix().toarray()
+    sv = np.linalg.svd(inc, compute_uv=False)
+    return tuple(sorted(sv))
+
 def could_be_isomorphic(hg1, hg2):
-    """ Simple heuristic to check if two hypergraphs are not isomorphic by comparing the singular values of their incidence matrices."""
-    # Compute the incidence matrices
-    inc1 = hg1.incidence_matrix().toarray()
-    inc2 = hg2.incidence_matrix().toarray()
-
-    # Compute the singular values and sort them
-    sv1 = np.linalg.svd(inc1, compute_uv=False)
-    sv1.sort()
-    sv2 = np.linalg.svd(inc2, compute_uv=False)
-    sv2.sort()
-
+    """Simple heuristic to check if two hypergraphs are not isomorphic by comparing the singular values of their incidence matrices."""
+    # Compute the sorted spectra using the cached function
+    sv1 = compute_sorted_spectrum(hg1)
+    sv2 = compute_sorted_spectrum(hg2)
+    
     # Compare the singular values
     return len(sv1) == len(sv2) and np.allclose(sv1, sv2)
 

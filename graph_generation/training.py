@@ -11,6 +11,7 @@ from hydra.core.hydra_config import HydraConfig
 from matplotlib.figure import Figure
 from omegaconf import OmegaConf
 from torch.optim import Adam
+from scipy.spatial import ConvexHull
 
 import wandb
 
@@ -77,7 +78,7 @@ class Trainer:
         }
 
         # checkpoint dir
-        self.output_dir = Path('/home/ids/gailhard/SODA_Hypergraph-generation/outputs/2024-07-31/11-16-17') # Path(HydraConfig.get().runtime.output_dir)
+        self.output_dir = Path(HydraConfig.get().runtime.output_dir)
 
         # Resume from checkpoint
         if cfg.training.resume:
@@ -220,10 +221,18 @@ class Trainer:
         for beta in self.cfg.ema.betas:
             val_results[f"ema_{beta}"] = self.evaluate(self.validation_hypergraphs, beta)
 
-            # Compute spectral fidelity
-            validation_score = 1 / val_results[f"ema_{beta}"]["Spectral"]
+            # Compute validation score
+            valid_keys = [
+                str(m) for m in self.metrics if "Valid" in str(m)
+            ]
+            if len(valid_keys) > 0:
+                validation_score = val_results[f"ema_{beta}"][
+                    valid_keys[0]
+                ]
+            else:
+                validation_score = 1 / val_results[f"ema_{beta}"]["Spectral"]
 
-            # Evaluate on test set if spectral fidelity improved
+            # Evaluate on test set if validation score improved
             if validation_score >= self.best_validation_scores[beta]:
                 self.best_validation_scores[beta] = validation_score
                 test_results[f"ema_{beta}"] = self.evaluate(self.test_hypergraphs, beta)
@@ -298,31 +307,55 @@ class Trainer:
         # Sample plots
         n = min(4, len(self.validation_hypergraphs)) // 2
         fig, axs = plt.subplots(n, 2, figsize=(50, 50))
+        
+        node_size=200
+        edge_width=2
+        node_color='skyblue'
+        edge_color='salmon'
+        alpha=0.7
+        
         for i in range(n * n):
+            ax = axs[i // n, i % n]
             H = pred_hypergraphs[i]
             
-            if len(H.nodes) > 1:
-                # Get the associated unweighted clique expansion
-                G = nx.Graph()
-                G.add_nodes_from(H.nodes())
-                for edge in H.edges:
-                    nodes = H.edges[edge]
-                    for k in range(len(nodes)):
-                        for l in range(k+1, len(nodes)):
-                            G.add_edge(nodes[k], nodes[l])
-        
-                # Compute layout via the clique expansion (hnx doesn't have an equivalent ...)
-                pos = nx.spring_layout(G, k=0.5, iterations=50)
-    
-                ax = axs[i // n, i % n]
-                hnx.draw(H, pos=pos, ax=ax)
-                ax.title.set_text(f"N = {len(H.nodes)}")
-                ax.title.set_fontsize(40)
-            else:
-                ax = axs[i // n, i % n]
-                hnx.draw(H, ax=ax)
-                ax.title.set_text(f"N = {len(H.nodes)}")
-                ax.title.set_fontsize(40)
+            #Get the clique expansion of the hypergraph (hnx doesn't have a spring layout...)
+            G = nx.Graph()
+            for edge in H.edges:
+                nodes = list(H.edges[edge])
+                for i in range(len(nodes)):
+                    for j in range(i+1, len(nodes)):
+                        G.add_edge(nodes[i], nodes[j])
+
+            # Compute layout
+            pos = nx.spring_layout(G, k=1, scale=1, iterations=100)
+            
+            # Draw hyperedges using convex hulls
+            for i, edge in enumerate(H.edges):
+                nodes = list(H.edges[edge])
+                if len(nodes) > 2:
+                    points = np.array([pos[node] for node in nodes])
+                    hull = ConvexHull(points)
+                    hull_points = points[hull.vertices]
+                    
+                    # Generate a random pastel color for the hull background
+                    hull_color = np.random.random(3) * 0.5 + 0.5
+                    
+                    ax.fill(hull_points[:, 0], hull_points[:, 1], color=hull_color, alpha=0.3)
+                    for simplex in hull.simplices:
+                        ax.plot(points[simplex, 0], points[simplex, 1], color=edge_color, 
+                                 linewidth=edge_width, alpha=alpha)
+                elif len(nodes) == 2:
+                    # For edges with only two nodes, draw a straight line
+                    node1, node2 = nodes
+                    ax.plot([pos[node1][0], pos[node2][0]], [pos[node1][1], pos[node2][1]],
+                             color=edge_color, linewidth=edge_width, alpha=alpha)
+            
+            # Draw nodes
+            nx.draw_networkx_nodes(G, pos, ax=ax, node_size=node_size, node_color=node_color, alpha=1, linewidths=1, edgecolors='black')
+            
+            ax.axis('off')
+            ax.title.set_text(f"N = {len(H.nodes)}")
+            ax.title.set_fontsize(40)
                 
         fig.tight_layout()
         results["examples"] = fig
