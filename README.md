@@ -1,6 +1,6 @@
 # HYGENE: A Diffusion-based Hypergraph Generation Method
 
-This repository contains the reference implementation of the paper [HYGENE: A Diffusion-based Hypergraph Generation Method]() TO ADD PREPRINT. The implementation is based on the one provided by [Efficient and Scalable Graph Generation through Iterative Local Expansion](https://openreview.net/forum?id=2XkTz7gdpc), many thanks for their great code!
+This repository contains the reference implementation of the paper [HYGENE: A Diffusion-based Hypergraph Generation Method](https://arxiv.org/abs/2408.16457). Our work is based on the work by [Efficient and Scalable Graph Generation through Iterative Local Expansion](https://openreview.net/forum?id=2XkTz7gdpc), many thanks for their great code!
 
 
 ## Setup
@@ -46,13 +46,14 @@ To log the results to [Wandb](https://wandb.ai/), set `wandb.logging` to `True` 
 ## Citation
 When using this code, please cite our paper:
 ```
-@misc{gailhard2024hygene,
+@misc{gailhard2024hygenediffusionbasedhypergraphgeneration,
       title={HYGENE: A Diffusion-based Hypergraph Generation Method}, 
-      author={Dorian Gailhard and Enzo Tartaglione and Lirida Naviner and Jhony Giraldo},
+      author={Dorian Gailhard and Enzo Tartaglione and Lirida Naviner De Barros and Jhony H. Giraldo},
       year={2024},
-      eprint={TO BE DONE},
+      eprint={2408.16457},
       archivePrefix={arXiv},
-      primaryClass={cs.SI}
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2408.16457}, 
 }
 ```
 
