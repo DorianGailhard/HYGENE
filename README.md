@@ -1,6 +1,6 @@
 # HYGENE: A Diffusion-based Hypergraph Generation Method
 
-This repository contains the reference implementation of the paper [HYGENE: A Diffusion-based Hypergraph Generation Method](https://arxiv.org/abs/2408.16457). Our work is based on the work by [Efficient and Scalable Graph Generation through Iterative Local Expansion](https://openreview.net/forum?id=2XkTz7gdpc), many thanks for their great code!
+This repository contains the reference implementation of the paper [HYGENE: A Diffusion-based Hypergraph Generation Method](https://arxiv.org/abs/2408.16457). Our work is based on [Efficient and Scalable Graph Generation through Iterative Local Expansion](https://openreview.net/forum?id=2XkTz7gdpc), many thanks for their great code!
 
 
 ## Setup
