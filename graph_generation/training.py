@@ -92,7 +92,7 @@ class Trainer:
         # Wandb
         if cfg.wandb.logging:
             self.wandb_run = wandb.init(
-                project="graph-generation",
+                project="hypergraph-generation",
                 config=OmegaConf.to_container(cfg, resolve=True),
                 name=cfg.name,
                 resume=self.run_id,

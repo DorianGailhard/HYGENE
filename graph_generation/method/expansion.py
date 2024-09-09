@@ -49,7 +49,7 @@ class Expansion(Method):
         node_type = th.ones(num_hypergraphs*2, dtype=th.int, device=self.device)
         node_type[1::2] = 0
         
-        while node_type.sum() < target_size.sum() and node_type.size(0) < 2500:
+        while node_type.sum() < target_size.sum():
             adj, batch, node_expansion, node_type = self.expand(
                 adj,
                 batch,
