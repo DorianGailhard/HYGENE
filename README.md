@@ -48,7 +48,7 @@ When using this code, please cite our paper:
 ```
 @misc{gailhard2024hygenediffusionbasedhypergraphgeneration,
       title={HYGENE: A Diffusion-based Hypergraph Generation Method}, 
-      author={Dorian Gailhard and Enzo Tartaglione and Lirida Naviner De Barros and Jhony H. Giraldo},
+      author={Dorian Gailhard and Enzo Tartaglione and Lirida Naviner and Jhony H. Giraldo},
       year={2024},
       eprint={2408.16457},
       archivePrefix={arXiv},
