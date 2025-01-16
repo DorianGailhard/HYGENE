@@ -216,10 +216,6 @@ class Expansion(Method):
 
     def get_loss(self, batch, model: Module, sign_net: Module):
         """Returns a weighted sum of the node and edge expansion loss and the augmented edge loss."""
-        node_map = th.repeat_interleave(
-            th.arange(0, batch.adj_reduced.size(0), device=self.device), batch.expansion_matrix.sum(0).long()
-        )
-        
         # get augmented hypergraph
         adj_augmented = self.get_augmented_hypergraph(
             batch.adj_reduced, batch.expansion_matrix
@@ -240,9 +236,9 @@ class Expansion(Method):
         else:
             both_type_node_emb_reduced = th.randn(
                 batch.node_type.size(0), self.emb_features, device=self.device
-            ) 
-                    
-        both_type_node_emb = both_type_node_emb_reduced[node_map]
+            )
+                
+        both_type_node_emb = batch.expansion_matrix @ both_type_node_emb_reduced
         node_emb = both_type_node_emb[batch.node_type == 1]
         edge_node_emb = both_type_node_emb[batch.node_type == 0]
             
