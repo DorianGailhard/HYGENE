@@ -260,6 +260,7 @@ class EDM:
                     model=model,
                     model_kwargs=model_kwargs,
                     node_attr_self_cond=node_attr_pred,
+                    edge_node_attr_self_cond=edge_node_attr_pred,
                     edge_attr_self_cond=edge_attr_pred,
                 )
                 node_attr_d_prime = (node_attr_next - node_attr_pred) / t_next
