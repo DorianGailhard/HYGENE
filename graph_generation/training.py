@@ -258,11 +258,8 @@ class Trainer:
         model = self.ema_models[beta]
         sign_net = self.ema_sign_nets[beta]
 
-        # Shuffle prediction order to make size distribution more uniform
-        pred_perm = self.rng.permutation(np.arange(len(eval_hypergraphs)))
-
         # Select target number of nodes and split into batches
-        target_size = np.array([len(g.nodes) for g in eval_hypergraphs])[pred_perm]
+        target_size = np.array([len(g.nodes) for g in eval_hypergraphs])
         bs = (
             self.cfg.validation.batch_size
             if self.cfg.validation.batch_size is not None
@@ -280,7 +277,7 @@ class Trainer:
                 model=model,
                 sign_net=sign_net,
             )
-        results["pred_hypergraphs"] = [pred_hypergraphs[i] for i in pred_perm]
+        results["pred_hypergraphs"] = pred_hypergraphs
         if self.device == "cuda":
             th.cuda.empty_cache()
 
