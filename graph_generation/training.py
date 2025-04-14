@@ -258,6 +258,9 @@ class Trainer:
         model = self.ema_models[beta]
         sign_net = self.ema_sign_nets[beta]
 
+        model.eval()
+        sign_net.eval()
+
         # Select target number of nodes and split into batches
         target_size = np.array([len(g.nodes) for g in eval_hypergraphs])
         bs = (
@@ -356,6 +359,9 @@ class Trainer:
                 
         fig.tight_layout()
         results["examples"] = fig
+                
+        model.train()
+        sign_net.train()
 
         return results
 
