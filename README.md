@@ -15,7 +15,7 @@ To get started, follow these steps:
     conda env create -f environment.yaml
     ```
 
-    Note that the `graph-tool` library is not available on Windows. This library is used for SBM graph evaluation, which will consequently not work on Windows. Everything else should work regardless of the operating system.
+    Note that the `graph-tool` library is not available on Windows. This library is used for SBM hypergraph evaluation, which will consequently not work on Windows. Everything else should work regardless of the operating system.
 
 
 ## Usage
@@ -57,3 +57,6 @@ When using this code, please cite our paper:
 }
 ```
 
+
+## Acknowledgments
+We acknowledge the [ANR – FRANCE](https://anr.fr/) (French National Research Agency) for its financial support of the [System On Chip Design leveraging Artificial Intelligence (SODA)](https://anr.fr/Project-ANR-23-IAS3-0004) project under grant ANR-23-IAS3-0004. This project has also been partially funded by the [Hi!PARIS Center on Data Analytics and Artificial Intelligence](https://www.hi-paris.fr/).
