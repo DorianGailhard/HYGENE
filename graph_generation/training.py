@@ -4,19 +4,18 @@ from time import time
 
 import matplotlib.pyplot as plt
 import hypernetx as hnx
-import networkx as nx
 import numpy as np
 import torch as th
 from hydra.core.hydra_config import HydraConfig
 from matplotlib.figure import Figure
 from omegaconf import OmegaConf
 from torch.optim import Adam
-from scipy.spatial import ConvexHull
 
 import wandb
 
 from .metrics import Metric
 from .model import EMA, EMA1
+from .visualization import plot_hypergraphs
 
 
 class Trainer:
@@ -162,8 +161,7 @@ class Trainer:
                 self.log({"training": loss_terms})
 
             if self.cfg.validation.interval > 0 and (
-                self.step >= self.cfg.validation.first_step
-                and self.step % self.cfg.validation.interval == 0
+                (self.step - self.cfg.validation.first_step) % self.cfg.validation.interval == 0
                 or last_step
             ):
                 if self.device == "cuda":
@@ -258,9 +256,6 @@ class Trainer:
         model = self.ema_models[beta]
         sign_net = self.ema_sign_nets[beta]
 
-        model.eval()
-        sign_net.eval()
-
         # Select target number of nodes and split into batches
         target_size = np.array([len(g.nodes) for g in eval_hypergraphs])
         bs = (
@@ -305,63 +300,9 @@ class Trainer:
                     )
 
         # Sample plots
-        n = min(4, len(self.validation_hypergraphs)) // 2
-        fig, axs = plt.subplots(n, 2, figsize=(50, 50))
-        
-        node_size=200
-        edge_width=2
-        node_color='skyblue'
-        edge_color='salmon'
-        alpha=0.7
-        
-        for i in range(n * n):
-            ax = axs[i // n, i % n]
-            H = pred_hypergraphs[i]
-            
-            #Get the clique expansion of the hypergraph (hnx doesn't have a spring layout...)
-            G = nx.Graph()
-            for edge in H.edges:
-                nodes = list(H.edges[edge])
-                for i in range(len(nodes)):
-                    for j in range(i+1, len(nodes)):
-                        G.add_edge(nodes[i], nodes[j])
-
-            # Compute layout
-            pos = nx.spring_layout(G, k=1, scale=1, iterations=100)
-            
-            # Draw hyperedges using convex hulls
-            for i, edge in enumerate(H.edges):
-                nodes = list(H.edges[edge])
-                if len(nodes) > 2:
-                    points = np.array([pos[node] for node in nodes])
-                    hull = ConvexHull(points)
-                    hull_points = points[hull.vertices]
-                    
-                    # Generate a random pastel color for the hull background
-                    hull_color = np.random.random(3) * 0.5 + 0.5
-                    
-                    ax.fill(hull_points[:, 0], hull_points[:, 1], color=hull_color, alpha=0.3)
-                    for simplex in hull.simplices:
-                        ax.plot(points[simplex, 0], points[simplex, 1], color=edge_color, 
-                                 linewidth=edge_width, alpha=alpha)
-                elif len(nodes) == 2:
-                    # For edges with only two nodes, draw a straight line
-                    node1, node2 = nodes
-                    ax.plot([pos[node1][0], pos[node2][0]], [pos[node1][1], pos[node2][1]],
-                             color=edge_color, linewidth=edge_width, alpha=alpha)
-            
-            # Draw nodes
-            nx.draw_networkx_nodes(G, pos, ax=ax, node_size=node_size, node_color=node_color, alpha=1, linewidths=1, edgecolors='black')
-            
-            ax.axis('off')
-            ax.title.set_text(f"N = {len(H.nodes)}")
-            ax.title.set_fontsize(40)
-                
-        fig.tight_layout()
+        fig = plot_hypergraphs(pred_hypergraphs)
         results["examples"] = fig
-                
-        model.train()
-        sign_net.train()
+        plt.close(fig)
 
         return results
 

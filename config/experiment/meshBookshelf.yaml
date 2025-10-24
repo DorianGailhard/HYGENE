@@ -16,4 +16,4 @@ validation:
   batch_size: 1
 
 spectral:
-  num_features: 2
+  num_eigenvectors: 2

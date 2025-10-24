@@ -5,8 +5,8 @@ from scipy.sparse import coo_matrix, csgraph, linalg
 
 
 class SpectrumExtractor:
-    def __init__(self, num_features, normalized=True):
-        self.num_features = num_features
+    def __init__(self, num_eigenvectors, normalized=True):
+        self.num_eigenvectors = num_eigenvectors
         self.normalized = normalized
 
     def __call__(self, adj):
@@ -16,9 +16,9 @@ class SpectrumExtractor:
 
         # get first k non-zero eigenvalues and corresponding eigenvectors sorted in ascending order of eigenvalues
         # in case k is larger than the number of nodes, fill up with zeros
-        eigenvalues_full = np.zeros(self.num_features)
-        eigenvectors_full = np.zeros((n, self.num_features))
-        k = min(n - 2, self.num_features)
+        eigenvalues_full = np.zeros(self.num_eigenvectors)
+        eigenvectors_full = np.zeros((n, self.num_eigenvectors))
+        k = min(n - 2, self.num_eigenvectors)
         if k > 0:
             while True:
                 try:

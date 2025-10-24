@@ -46,14 +46,11 @@ To log the results to [Wandb](https://wandb.ai/), set `wandb.logging` to `True` 
 ## Citation
 When using this code, please cite our paper:
 ```
-@misc{gailhard2024hygenediffusionbasedhypergraphgeneration,
-  title = {HYGENE: A Diffusion-based Hypergraph Generation Method},
-  author = {Gailhard, Dorian and Tartaglione, Enzo and Naviner, Lirida and Giraldo, Jhony H.},
-  year = {2024},
-  eprint = {2408.16457},
-  archiveprefix = {arXiv},
-  primaryclass = {cs.LG},
-  url = {https://arxiv.org/abs/2408.16457},
+@inproceedings{gailhard2025hygene,
+    title={HYGENE: A Diffusion-based Hypergraph Generation Method},
+    author={Gailhard, Dorian and Tartaglione, Enzo and Naviner, Lirida and Giraldo, Jhony H.},
+    booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+    year={2025},
 }
 ```
 

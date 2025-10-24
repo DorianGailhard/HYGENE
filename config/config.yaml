@@ -26,14 +26,14 @@ reduction:
   rand_lambda: 0.3 # 0 for no randomization
 
 spectral:
-  num_features: 2
+  num_eigenvectors: 2
   normalized_laplacian: True
 
 training:
   batch_size: 5
   lr: 1e-4
   num_steps: -1 # infinite
-  max_num_workers: 10
+  max_num_workers: 4
   log_interval: 100
   save_checkpoint: True
   resume: False # if True, resume from last checkpoint, if number, resume from that step
@@ -48,14 +48,14 @@ testing: False # if True, only evaluate on test set
 
 model:
   name: ppgn
-  emb_features: 32
-  hidden_features: 256
-  ppgn_features: 128
+  emb_dim: 32
+  hidden_dim: 256
+  ppgn_dim: 128
   num_layers: 10
   dropout: 0.1
 
 sign_net:
-  hidden_features: 128
+  hidden_dim: 128
   num_layers: 5
 
 ema:

@@ -19,10 +19,10 @@ def get_expansion_items(cfg: DictConfig, train_hypergraphs):
     # Spectral Features
     spectrum_extractor = (
         gg.spectral.SpectrumExtractor(
-            num_features=cfg.spectral.num_features,
+            num_eigenvectors=cfg.spectral.num_eigenvectors,
             normalized=cfg.spectral.normalized_laplacian,
         )
-        if cfg.spectral.num_features > 0
+        if cfg.spectral.num_eigenvectors > 0
         else None
     )
 
@@ -66,37 +66,29 @@ def get_expansion_items(cfg: DictConfig, train_hypergraphs):
     )
 
     # Model
-    if cfg.spectral.num_features > 0:
+    if cfg.spectral.num_eigenvectors > 0:
         sign_net = gg.model.SignNet(
-            num_eigenvectors=cfg.spectral.num_features,
-            hidden_features=cfg.sign_net.hidden_features,
-            out_features=cfg.model.emb_features,
+            num_eigenvectors=cfg.spectral.num_eigenvectors,
+            hidden_dim=cfg.sign_net.hidden_dim,
+            out_dim=cfg.model.emb_dim,
             num_layers=cfg.sign_net.num_layers,
         )
     else:
         sign_net = None
 
-    features = 2 if cfg.diffusion.name == "discrete" else 1
+    dim = 2 if cfg.diffusion.name == "discrete" else 1
+    dim_hyperedges = 3 if cfg.diffusion.name == "discrete" else 1
     if cfg.model.name == "ppgn":
         model = gg.model.SparsePPGN(
-            node_in_features=features * (1 + cfg.diffusion.self_conditioning),
-            edge_in_features=features * (1 + cfg.diffusion.self_conditioning),
-            node_out_features=features,
-            edge_out_features=features,
-            emb_features=cfg.model.emb_features,
-            hidden_features=cfg.model.hidden_features,
-            ppgn_features=cfg.model.ppgn_features,
-            num_layers=cfg.model.num_layers,
-            dropout=cfg.model.dropout,
-        )
-    elif cfg.model.name == "gine":
-        model = gg.model.GINE(
-            node_in_features=features * (1 + cfg.diffusion.self_conditioning),
-            edge_in_features=features * (1 + cfg.diffusion.self_conditioning),
-            node_out_features=features,
-            edge_out_features=features,
-            emb_features=cfg.model.emb_features,
-            hidden_features=cfg.model.hidden_features,
+            node_in_dim=dim * (1 + cfg.diffusion.self_conditioning),
+            hyperedge_in_dim=dim_hyperedges * (1 + cfg.diffusion.self_conditioning),
+            incidence_in_dim=dim * (1 + cfg.diffusion.self_conditioning),
+            node_out_dim=dim,
+            hyperedge_out_dim=dim_hyperedges,
+            incidence_out_dim=dim,
+            emb_dim=cfg.model.emb_dim,
+            hidden_dim=cfg.model.hidden_dim,
+            ppgn_dim=cfg.model.ppgn_dim,
             num_layers=cfg.model.num_layers,
             dropout=cfg.model.dropout,
         )
@@ -121,7 +113,7 @@ def get_expansion_items(cfg: DictConfig, train_hypergraphs):
     method = gg.method.Expansion(
         diffusion=diffusion,
         spectrum_extractor=spectrum_extractor,
-        emb_features=cfg.model.emb_features,
+        emb_dim=cfg.model.emb_dim,
         augmented_radius=cfg.method.augmented_radius,
         augmented_dropout=cfg.method.augmented_dropout,
         deterministic_expansion=cfg.method.deterministic_expansion,

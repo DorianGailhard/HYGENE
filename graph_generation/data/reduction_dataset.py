@@ -37,7 +37,7 @@ class RandRedDataset(IterableDataset, ABC):
                     adj=red.bipartite_adj.astype(bool).astype(np.float32),
                     node_type=node_type,
                     node_expansion=red.node_expansion,
-                    edge_expansion=red.edge_expansion,
+                    hyperedge_expansion=red.hyperedge_expansion,
                     adj_reduced=reduced_hypergraph.bipartite_adj.astype(bool).astype(np.float32),
                     node_type_reduced=node_type_reduced,
                     expansion_matrix=reduced_hypergraph.expansion_matrix,

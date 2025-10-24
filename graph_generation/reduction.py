@@ -43,7 +43,7 @@ class Reduction(ABC):
             if expansion_matrix is None
             else expansion_matrix.sum(0)[:self.n].astype(np.int32)
         )
-        self.edge_expansion = (
+        self.hyperedge_expansion = (
             np.ones(self.bipartite_adj.shape[0] - self.n, dtype=np.int32)
             if expansion_matrix is None
             else expansion_matrix.sum(0)[self.n:].astype(np.int32)
@@ -53,7 +53,7 @@ class Reduction(ABC):
 
     def get_reduced_hypergraph(self, rng=np.random.default_rng()):
         # Compute the coarsened clique representation
-        C, collapsed_coarsened_incidence, edge_lifting_matrix = self.get_coarsening_matrix(rng)
+        C, collapsed_coarsened_incidence, hyperedge_lifting_matrix = self.get_coarsening_matrix(rng)
         
         # P_inv = C.T with all non-zero entries set to 1
         P_inv = C.T.astype(bool).astype(C.dtype)
@@ -83,8 +83,8 @@ class Reduction(ABC):
         bottom = hstack([collapsed_coarsened_incidence.T, zero_hyperedges])
         bipartite_adjacency = csc_array(vstack([top, bottom]))
         
-        # Add the edge_lifting_matrix to the expansion matrix
-        expansion_matrix = bmat([[P_inv, None], [None, edge_lifting_matrix]], format='coo')
+        # P_inv is for the nodes, hyperedge_lifting_matrix for the hyperedges
+        expansion_matrix = bmat([[P_inv, None], [None, hyperedge_lifting_matrix]], format='coo')
         
         return self.__class__(
             bipartite_adj=bipartite_adjacency,
@@ -120,7 +120,7 @@ class Reduction(ABC):
         d_inv_sqrt[mask] = 0
         return self.B @ np.diag(d_inv_sqrt) @ V
     
-    def collapse_duplicate_edges(self, coarsened_incidence: csc_array, edge_lifting_matrix: csc_array):
+    def collapse_duplicate_edges(self, coarsened_incidence: csc_array, hyperedge_lifting_matrix: csc_array):
         unique_columns = {}
         column_map = {}
         next_col_index = 0
@@ -133,14 +133,14 @@ class Reduction(ABC):
             col = tuple(coarsened_incidence.indices[start:end])
     
             if col in unique_columns:
-                start_lifting, end_lifting = edge_lifting_matrix.indptr[col_index], edge_lifting_matrix.indptr[col_index+1]
-                mergings[unique_columns[col]].extend(edge_lifting_matrix.indices[start_lifting:end_lifting])
+                start_lifting, end_lifting = hyperedge_lifting_matrix.indptr[col_index], hyperedge_lifting_matrix.indptr[col_index+1]
+                mergings[unique_columns[col]].extend(hyperedge_lifting_matrix.indices[start_lifting:end_lifting])
             else:
                 unique_columns[col] = next_col_index
                 column_map[col_index] = next_col_index
                 
-                start_lifting, end_lifting = edge_lifting_matrix.indptr[col_index], edge_lifting_matrix.indptr[col_index+1]
-                mergings[next_col_index] = list(edge_lifting_matrix.indices[start_lifting:end_lifting])
+                start_lifting, end_lifting = hyperedge_lifting_matrix.indptr[col_index], hyperedge_lifting_matrix.indptr[col_index+1]
+                mergings[next_col_index] = list(hyperedge_lifting_matrix.indices[start_lifting:end_lifting])
                 next_col_index += 1
     
         # Construct the collapsed incidence matrix
@@ -159,7 +159,7 @@ class Reduction(ABC):
         
         # Create the collapsed matrices
         collapsed_incidence_matrix = csc_array((np.ones(incidence_collapsed_indptr[-1], dtype=int), incidence_collapsed_rows, incidence_collapsed_indptr), shape=(coarsened_incidence.shape[0], next_col_index))
-        collapsed_lifting_matrix = csc_array((np.ones(lifting_collapsed_indptr[-1], dtype=int), lifting_collapsed_rows, lifting_collapsed_indptr), shape=(edge_lifting_matrix.shape[0], next_col_index))
+        collapsed_lifting_matrix = csc_array((np.ones(lifting_collapsed_indptr[-1], dtype=int), lifting_collapsed_rows, lifting_collapsed_indptr), shape=(hyperedge_lifting_matrix.shape[0], next_col_index))
     
         return collapsed_incidence_matrix, collapsed_lifting_matrix
     
@@ -186,7 +186,7 @@ class Reduction(ABC):
         marked = np.zeros(self.n, dtype=bool)
         
         incidence_matrix = csc_array(self.bipartite_adj [:self.n, self.n:])
-        edge_lifting_matrix = eye(incidence_matrix.shape[1], format='csc')
+        hyperedge_lifting_matrix = eye(incidence_matrix.shape[1], format='csc')
         
         # As we dynamically reduce the incidence matrix, the indices in the
         # contraction_set do not correspond to those of the matrix
@@ -218,11 +218,11 @@ class Reduction(ABC):
                 coarsened_incidence = csc_array((np.ones(new_indptr[-1], dtype=int), new_indices, new_indptr), shape=(incidence_matrix.shape[0] - len(index_map_contraction_set)+1, incidence_matrix.shape[1]))
                 
                 # Then merge the hyperedges  
-                collapsed_coarsened_incidence, new_edge_lifting_matrix = self.collapse_duplicate_edges(coarsened_incidence, edge_lifting_matrix)
+                collapsed_coarsened_incidence, new_hyperedge_lifting_matrix = self.collapse_duplicate_edges(coarsened_incidence, hyperedge_lifting_matrix)
 
-                if new_edge_lifting_matrix.sum(0).max() <= 3:
+                if new_hyperedge_lifting_matrix.sum(0).max() <= 3:
                     incidence_matrix = collapsed_coarsened_incidence
-                    edge_lifting_matrix = new_edge_lifting_matrix
+                    hyperedge_lifting_matrix = new_hyperedge_lifting_matrix
                     partitions.append(contraction_set)
                     marked[contraction_set] = True
                     
@@ -242,7 +242,7 @@ class Reduction(ABC):
             P[partition[0], partition] = 1 / size
             mask[partition[1:]] = False
         P = P[mask, :]
-        return coo_array(P, dtype=np.float64), incidence_matrix, edge_lifting_matrix
+        return coo_array(P, dtype=np.float64), incidence_matrix, hyperedge_lifting_matrix
 
 
     @abstractmethod

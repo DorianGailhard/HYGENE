@@ -13,18 +13,18 @@ class EDMModel(Module):
 
     def forward(
         self,
-        edge_index,
+        incidence_index,
         batch,
         node_type,
         node_attr,
-        edge_node_attr,
-        edge_attr,
+        hyperedge_attr,
+        incidence_attr,
         t,
         model,
         model_kwargs,
         node_attr_self_cond=None,
-        edge_node_attr_self_cond=None,
-        edge_attr_self_cond=None,
+        hyperedge_attr_self_cond=None,
+        incidence_attr_self_cond=None,
     ):
         # compute weights
         sigma_data = EDM.sigma_data
@@ -35,76 +35,76 @@ class EDMModel(Module):
         # compute input
         model_kwargs = dict(model_kwargs, noise_cond=(t.log() / 4.0).float())
         node_attr_in = c_in[batch[node_type == 1]] * node_attr
-        edge_node_attr_in = c_in[batch[node_type == 0]] * edge_node_attr
-        edge_batch = batch[edge_index[0]]
-        edge_attr_in = c_in[edge_batch] * edge_attr
+        hyperedge_attr_in = c_in[batch[node_type == 0]] * hyperedge_attr
+        incidence_batch = batch[incidence_index[0]]
+        incidence_attr_in = c_in[incidence_batch] * incidence_attr
 
         # self-conditioning
         if self.self_conditioning:
             if not model.training:
                 assert (
-                    node_attr_self_cond is not None and edge_node_attr_self_cond is not None and edge_attr_self_cond is not None
+                    node_attr_self_cond is not None and hyperedge_attr_self_cond is not None and incidence_attr_self_cond is not None
                 )
             elif np.random.rand() < 0.5:
                 # compute self-conditioning
                 with th.no_grad():
-                    node_attr_self_cond, edge_node_attr_self_cond, edge_attr_self_cond = model(
-                        edge_index=edge_index,
+                    node_attr_self_cond, hyperedge_attr_self_cond, incidence_attr_self_cond = model(
+                        incidence_index=incidence_index,
                         batch=batch,
                         node_type=node_type,
                         node_attr=th.cat(
                             [node_attr_in, th.zeros_like(node_attr_in)], dim=-1
                         ).float(),
-                        edge_node_attr=th.cat(
-                            [edge_node_attr_in, th.zeros_like(edge_node_attr_in)], dim=-1
+                        hyperedge_attr=th.cat(
+                            [hyperedge_attr_in, th.zeros_like(hyperedge_attr_in)], dim=-1
                         ).float(),
-                        edge_attr=th.cat(
-                            [edge_attr_in, th.zeros_like(edge_attr_in)], dim=-1
+                        incidence_attr=th.cat(
+                            [incidence_attr_in, th.zeros_like(incidence_attr_in)], dim=-1
                         ).float(),
                         **model_kwargs,
                     )
                     node_attr_self_cond = (
                         c_skip[batch[node_type == 1]] * node_attr + c_out[batch[node_type == 1]] * node_attr_self_cond
                     ).detach()
-                    edge_node_attr_self_cond = (
-                        c_skip[batch[node_type == 0]] * edge_node_attr + c_out[batch[node_type == 0]] * edge_node_attr_self_cond
+                    hyperedge_attr_self_cond = (
+                        c_skip[batch[node_type == 0]] * hyperedge_attr + c_out[batch[node_type == 0]] * hyperedge_attr_self_cond
                     ).detach()
-                    edge_attr_self_cond = (
-                        c_skip[edge_batch] * edge_attr
-                        + c_out[edge_batch] * edge_attr_self_cond
+                    incidence_attr_self_cond = (
+                        c_skip[incidence_batch] * incidence_attr
+                        + c_out[incidence_batch] * incidence_attr_self_cond
                     ).detach()
             else:
                 node_attr_self_cond = th.zeros_like(node_attr)
-                edge_node_attr_self_cond = th.zeros_like(edge_node_attr)
-                edge_attr_self_cond = th.zeros_like(edge_attr)
+                hyperedge_attr_self_cond = th.zeros_like(hyperedge_attr)
+                incidence_attr_self_cond = th.zeros_like(incidence_attr)
 
             # scale self-conditioning
             node_attr_self_cond = node_attr_self_cond / sigma_data
-            edge_node_attr_self_cond = edge_node_attr_self_cond / sigma_data
-            edge_attr_self_cond = edge_attr_self_cond / sigma_data
+            hyperedge_attr_self_cond = hyperedge_attr_self_cond / sigma_data
+            incidence_attr_self_cond = incidence_attr_self_cond / sigma_data
 
             # concatenate with input
             node_attr_in = th.cat([node_attr_in, node_attr_self_cond], dim=-1)
-            edge_node_attr_in = th.cat([edge_node_attr_in, edge_node_attr_self_cond], dim=-1)
-            edge_attr_in = th.cat([edge_attr_in, edge_attr_self_cond], dim=-1)
+            hyperedge_attr_in = th.cat([hyperedge_attr_in, hyperedge_attr_self_cond], dim=-1)
+            incidence_attr_in = th.cat([incidence_attr_in, incidence_attr_self_cond], dim=-1)
 
         # compute output
-        node_attr_pred, edge_node_attr_pred, edge_attr_pred = model(
-            edge_index=edge_index,
+        node_attr_pred, hyperedge_attr_pred, incidence_attr_pred = model(
+            incidence_index=incidence_index,
             batch=batch,
             node_type=node_type,
             node_attr=node_attr_in.float(),
-            edge_node_attr=edge_node_attr_in.float(),
-            edge_attr=edge_attr_in.float(),
+            hyperedge_attr=hyperedge_attr_in.float(),
+            incidence_attr=incidence_attr_in.float(),
             **model_kwargs,
         )
         node_attr_pred = c_skip[batch[node_type == 1]] * node_attr + c_out[batch[node_type == 1]] * node_attr_pred
-        edge_node_attr_pred = c_skip[batch[node_type == 0]] * edge_node_attr + c_out[batch[node_type == 0]] * edge_node_attr_pred
-        edge_attr_pred = (
-            c_skip[edge_batch] * edge_attr + c_out[edge_batch] * edge_attr_pred
+        hyperedge_attr_pred = c_skip[batch[node_type == 0]] * hyperedge_attr + c_out[batch[node_type == 0]] * hyperedge_attr_pred
+        incidence_attr_pred = (
+            c_skip[incidence_batch] * incidence_attr + c_out[incidence_batch] * incidence_attr_pred
         )
 
-        return node_attr_pred, edge_node_attr_pred, edge_attr_pred
+        return node_attr_pred, hyperedge_attr_pred, incidence_attr_pred
 
 
 class EDM:
@@ -133,11 +133,11 @@ class EDM:
         self.model_wrapper.to(device)
         return self
 
-    def get_loss(self, edge_index, batch, node_type, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
+    def get_loss(self, incidence_index, batch, node_type, node_attr, hyperedge_attr, incidence_attr, model, model_kwargs):
         # rescale attributes to {-1, 1}
         node_attr = node_attr.float() * 2 - 1
-        edge_node_attr = edge_node_attr.float() - 1
-        edge_attr = edge_attr.float() * 2 - 1
+        hyperedge_attr = hyperedge_attr.float() - 1
+        incidence_attr = incidence_attr.float() * 2 - 1
         
         # sample noise level
         num_graphs = batch.max().item() + 1
@@ -145,38 +145,38 @@ class EDM:
         t = (rnd_normal * self.P_std + self.P_mean).exp()
 
         # sample noise
-        edge_batch = batch[edge_index[0]]
+        incidence_batch = batch[incidence_index[0]]
 
         node_noise = th.randn_like(node_attr) * t[batch[node_type == 1]]
-        edge_node_noise = th.randn_like(edge_node_attr) * t[batch[node_type == 0]]
-        edge_noise = self.edge_randn(edge_index) * t[edge_batch]
+        hyperedge_noise = th.randn_like(hyperedge_attr) * t[batch[node_type == 0]]
+        incidence_noise = self.incidence_randn(incidence_index) * t[incidence_batch]
 
         # make prediction
-        node_pred, edge_node_pred, edge_pred = self.model_wrapper(
-            edge_index=edge_index,
+        node_pred, hyperedge_pred, incidence_pred = self.model_wrapper(
+            incidence_index=incidence_index,
             batch=batch,
             node_type=node_type,
             node_attr=(node_attr + node_noise).unsqueeze(1),
-            edge_node_attr=(edge_node_attr + edge_node_noise).unsqueeze(1),
-            edge_attr=(edge_attr + edge_noise).unsqueeze(1),
+            hyperedge_attr=(hyperedge_attr + hyperedge_noise).unsqueeze(1),
+            incidence_attr=(incidence_attr + incidence_noise).unsqueeze(1),
             t=t,
             model=model,
             model_kwargs=model_kwargs,
         )
         node_pred = node_pred.float().squeeze(1)
-        edge_node_pred = edge_node_pred.float().squeeze(1)
-        edge_pred = edge_pred.float().squeeze(1)
+        hyperedge_pred = hyperedge_pred.float().squeeze(1)
+        incidence_pred = incidence_pred.float().squeeze(1)
 
         # compute loss
         weight = (t**2 + self.sigma_data**2) / (t * self.sigma_data) ** 2
         node_loss = weight[batch[node_type == 1]] * (node_pred - node_attr) ** 2
-        edge_node_loss = weight[batch[node_type == 0]] * (edge_node_pred - edge_node_attr) ** 2
-        edge_loss = weight[edge_batch] * (edge_pred - edge_attr) ** 2
+        hyperedge_loss = weight[batch[node_type == 0]] * (hyperedge_pred - hyperedge_attr) ** 2
+        incidence_loss = weight[incidence_batch] * (incidence_pred - incidence_attr) ** 2
             
-        return node_loss, edge_node_loss, edge_loss
+        return node_loss, hyperedge_loss, incidence_loss
 
     @th.no_grad()
-    def sample(self, edge_index, node_type, batch, model, model_kwargs):
+    def sample(self, incidence_index, node_type, batch, model, model_kwargs):
         num_graphs = batch.max().item() + 1
 
         # time step discretization
@@ -191,19 +191,19 @@ class EDM:
 
         # sample latents
         node_attr_next = th.randn_like(batch[node_type == 1], dtype=th.float64)[:, None] * t_steps[0]
-        edge_node_attr_next = th.randn_like(batch[node_type == 0], dtype=th.float64)[:, None] * t_steps[0]
-        edge_attr_next = (
-            self.edge_randn(edge_index, dtype=th.float64)[:, None] * t_steps[0]
+        hyperedge_attr_next = th.randn_like(batch[node_type == 0], dtype=th.float64)[:, None] * t_steps[0]
+        incidence_attr_next = (
+            self.incidence_randn(incidence_index, dtype=th.float64)[:, None] * t_steps[0]
         )
 
         node_attr_pred = th.zeros_like(node_attr_next)
-        edge_node_attr_pred = th.zeros_like(edge_node_attr_next)
-        edge_attr_pred = th.zeros_like(edge_attr_next)
+        hyperedge_attr_pred = th.zeros_like(hyperedge_attr_next)
+        incidence_attr_pred = th.zeros_like(incidence_attr_next)
         # sample loop
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):
             node_attr_cur = node_attr_next
-            edge_node_attr_cur = edge_node_attr_next
-            edge_attr_cur = edge_attr_next
+            hyperedge_attr_cur = hyperedge_attr_next
+            incidence_attr_cur = incidence_attr_next
 
             # increase noise temporarily
             gamma = (
@@ -215,86 +215,86 @@ class EDM:
             node_attr_hat = node_attr_cur + (
                 t_hat**2 - t_cur**2
             ).sqrt() * self.S_noise * th.randn_like(node_attr_cur)
-            edge_node_attr_hat = edge_node_attr_cur + (
+            hyperedge_attr_hat = hyperedge_attr_cur + (
                 t_hat**2 - t_cur**2
-            ).sqrt() * self.S_noise * th.randn_like(edge_node_attr_cur)
-            edge_attr_hat = (
-                edge_attr_cur
+            ).sqrt() * self.S_noise * th.randn_like(hyperedge_attr_cur)
+            incidence_attr_hat = (
+                incidence_attr_cur
                 + (t_hat**2 - t_cur**2).sqrt()
                 * self.S_noise
-                * self.edge_randn(edge_index, dtype=th.float64)[:, None]
+                * self.incidence_randn(incidence_index, dtype=th.float64)[:, None]
             )
 
             # Euler step
-            node_attr_pred, edge_node_attr_pred, edge_attr_pred = self.model_wrapper(
-                edge_index=edge_index,
+            node_attr_pred, hyperedge_attr_pred, incidence_attr_pred = self.model_wrapper(
+                incidence_index=incidence_index,
                 batch=batch,
                 node_type=node_type,
                 node_attr=node_attr_hat,
-                edge_node_attr=edge_node_attr_hat,
-                edge_attr=edge_attr_hat,
+                hyperedge_attr=hyperedge_attr_hat,
+                incidence_attr=incidence_attr_hat,
                 t=t_hat.repeat(num_graphs),
                 model=model,
                 model_kwargs=model_kwargs,
                 node_attr_self_cond=node_attr_pred,
-                edge_node_attr_self_cond=edge_node_attr_pred,
-                edge_attr_self_cond=edge_attr_pred,
+                hyperedge_attr_self_cond=hyperedge_attr_pred,
+                incidence_attr_self_cond=incidence_attr_pred,
             )
             node_attr_d = (node_attr_hat - node_attr_pred) / t_hat
-            edge_node_attr_d = (edge_node_attr_hat - edge_node_attr_pred) / t_hat
-            edge_attr_d = (edge_attr_hat - edge_attr_pred) / t_hat
+            hyperedge_attr_d = (hyperedge_attr_hat - hyperedge_attr_pred) / t_hat
+            incidence_attr_d = (incidence_attr_hat - incidence_attr_pred) / t_hat
             node_attr_next = node_attr_hat + (t_next - t_hat) * node_attr_d
-            edge_node_attr_next = edge_node_attr_hat + (t_next - t_hat) * edge_node_attr_d
-            edge_attr_next = edge_attr_hat + (t_next - t_hat) * edge_attr_d
+            hyperedge_attr_next = hyperedge_attr_hat + (t_next - t_hat) * hyperedge_attr_d
+            incidence_attr_next = incidence_attr_hat + (t_next - t_hat) * incidence_attr_d
 
             # 2nd order correction
             if i < self.num_steps - 1:
-                node_attr_pred, edge_node_attr_pred, edge_attr_pred = self.model_wrapper(
-                    edge_index=edge_index,
+                node_attr_pred, hyperedge_attr_pred, incidence_attr_pred = self.model_wrapper(
+                    incidence_index=incidence_index,
                     batch=batch,
                     node_type=node_type,
                     node_attr=node_attr_next,
-                    edge_node_attr=edge_node_attr_next,
-                    edge_attr=edge_attr_next,
+                    hyperedge_attr=hyperedge_attr_next,
+                    incidence_attr=incidence_attr_next,
                     t=t_next.repeat(num_graphs),
                     model=model,
                     model_kwargs=model_kwargs,
                     node_attr_self_cond=node_attr_pred,
-                    edge_node_attr_self_cond=edge_node_attr_pred,
-                    edge_attr_self_cond=edge_attr_pred,
+                    hyperedge_attr_self_cond=hyperedge_attr_pred,
+                    incidence_attr_self_cond=incidence_attr_pred,
                 )
                 node_attr_d_prime = (node_attr_next - node_attr_pred) / t_next
-                edge_node_attr_d_prime = (edge_node_attr_next - edge_node_attr_pred) / t_next
-                edge_attr_d_prime = (edge_attr_next - edge_attr_pred) / t_next
+                hyperedge_attr_d_prime = (hyperedge_attr_next - hyperedge_attr_pred) / t_next
+                incidence_attr_d_prime = (incidence_attr_next - incidence_attr_pred) / t_next
                 node_attr_next = node_attr_hat + (t_next - t_hat) * (
                     0.5 * node_attr_d + 0.5 * node_attr_d_prime
                 )
-                edge_node_attr_next = edge_node_attr_hat + (t_next - t_hat) * (
-                    0.5 * edge_node_attr_d + 0.5 * edge_node_attr_d_prime
+                hyperedge_attr_next = hyperedge_attr_hat + (t_next - t_hat) * (
+                    0.5 * hyperedge_attr_d + 0.5 * hyperedge_attr_d_prime
                 )
-                edge_attr_next = edge_attr_hat + (t_next - t_hat) * (
-                    0.5 * edge_attr_d + 0.5 * edge_attr_d_prime
+                incidence_attr_next = incidence_attr_hat + (t_next - t_hat) * (
+                    0.5 * incidence_attr_d + 0.5 * incidence_attr_d_prime
                 )
 
         # rescale attributes to {0, 1} and {0, 2}
         node_attr_out = (node_attr_next + 1) / 2
-        edge_node_attr_out = edge_node_attr_next + 1
-        edge_attr_out = (edge_attr_next + 1) / 2
+        hyperedge_attr_out = hyperedge_attr_next + 1
+        incidence_attr_out = (incidence_attr_next + 1) / 2
 
-        return node_attr_out.squeeze(1), edge_node_attr_out.squeeze(1), edge_attr_out.squeeze(1)
+        return node_attr_out.squeeze(1), hyperedge_attr_out.squeeze(1), incidence_attr_out.squeeze(1)
 
     @staticmethod
-    def edge_randn(edge_index, dtype=th.float32) -> th.Tensor:
-        """Sample symmetric Gaussian noise for edges in edge_index."""
+    def incidence_randn(incidence_index, dtype=th.float32) -> th.Tensor:
+        """Sample symmetric Gaussian noise for incidences in incidence_index."""
         # sample noise for upper triangle
-        edge_index_u = edge_index[:, edge_index[0] <= edge_index[1]]
-        edge_noise_u = th.randn_like(edge_index_u[0], dtype=dtype)
+        incidence_index_u = incidence_index[:, incidence_index[0] <= incidence_index[1]]
+        incidence_noise_u = th.randn_like(incidence_index_u[0], dtype=dtype)
 
         # make symmetric
-        new_edge_index, edge_noise = sort_edge_index(
-            edge_index=th.cat([edge_index_u, edge_index_u.flip(0)], dim=1),
-            edge_attr=th.cat([edge_noise_u, edge_noise_u], dim=0),
+        new_incidence_index, incidence_noise = sort_edge_index(
+            edge_index=th.cat([incidence_index_u, incidence_index_u.flip(0)], dim=1),
+            edge_attr=th.cat([incidence_noise_u, incidence_noise_u], dim=0),
         )
-        assert (edge_index == new_edge_index).all()
+        assert (incidence_index == new_incidence_index).all()
 
-        return edge_noise
+        return incidence_noise

@@ -22,6 +22,7 @@ class EMA(Module):
         self.ema_model = copy.deepcopy(model)
         self.ema_model.requires_grad_(False)
         self.ema_model.eval()
+        self.eval()
         self.beta = beta
         self.gamma = gamma
         self.power = power

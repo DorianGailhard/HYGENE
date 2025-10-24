@@ -9,30 +9,30 @@ class SignNet(Module):
     def __init__(
         self,
         num_eigenvectors: int,
-        hidden_features: int,
-        out_features: int,
+        hidden_dim: int,
+        out_dim: int,
         num_layers: int,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
 
-        self.in_layer = Linear(2, hidden_features)
+        self.in_layer = Linear(2, hidden_dim)
         self.conv_layers = ModuleList(
             [
                 GINConv(
-                    MLP(hidden_features, [hidden_features, hidden_features]),
+                    MLP(hidden_dim, [hidden_dim, hidden_dim]),
                     train_eps=True,
                 )
                 for _ in range(num_layers)
             ]
         )
-        self.skip_layer = Linear(hidden_features * (num_layers + 1), hidden_features)
+        self.skip_layer = Linear(hidden_dim * (num_layers + 1), hidden_dim)
         self.dropout = Dropout(dropout)
         # the following corresponds to the ρ function in the paper
         self.merge_layer = MLP(
-            in_features=num_eigenvectors * hidden_features,
-            hidden_features=[hidden_features, hidden_features],
-            out_features=out_features,
+            in_dim=num_eigenvectors * hidden_dim,
+            hidden_dim=[hidden_dim, hidden_dim],
+            out_dim=out_dim,
         )
 
     def forward(self, spectral_features, edge_index):
@@ -43,7 +43,7 @@ class SignNet(Module):
             edge_index (Adj): Adjacency matrix given as edge index or sparse tensor. Shape: :math:`(2, E)` or :math:`(V, V)`.
 
         Returns:
-            Tensor: Node features. Shape: :math:`(V, out_features)`.
+            Tensor: Node features. Shape: :math:`(V, out_dim)`.
         """
         # Stack spectral features
         eigenvalues_repeated, eigenvectors = spectral_features.chunk(
@@ -63,7 +63,7 @@ class SignNet(Module):
         )  # 2, k, V, 2
 
         # Apply layers
-        x = self.in_layer(combined_spectral_features)  # 2, k, V, hidden_features
+        x = self.in_layer(combined_spectral_features)  # 2, k, V, hidden_dim
         xs = [x]
         for conv in self.conv_layers:
             # apply conv layer to each spectral feature independently
@@ -73,12 +73,12 @@ class SignNet(Module):
         # Skip connection
         x = th.cat(xs, dim=-1)
         x = self.dropout(x)
-        x = self.skip_layer(x)  # 2, k, V, hidden_features
+        x = self.skip_layer(x)  # 2, k, V, hidden_dim
         # Make sign invariant
-        x = x.sum(dim=0)  # k, V, hidden_features
+        x = x.sum(dim=0)  # k, V, hidden_dim
 
         # Merge features
-        x = x.transpose(0, 1)  # V, k, hidden_features
-        x = self.merge_layer(x.reshape(x.size(0), -1))  # V, out_features
+        x = x.transpose(0, 1)  # V, k, hidden_dim
+        x = self.merge_layer(x.reshape(x.size(0), -1))  # V, out_dim
 
         return x

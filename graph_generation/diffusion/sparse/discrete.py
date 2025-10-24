@@ -3,68 +3,69 @@ import torch as th
 from torch.nn import Module
 from torch.nn import functional as F
 from torch_geometric.utils import sort_edge_index
+from torch_scatter import scatter
 
 
 class DiscreteGraphDiffusionModel(Module):
     """Preconditioning for discrete diffusion with optional self-conditioning"""
 
     def __init__(
-        self, self_conditioning, num_node_categories, num_edge_node_categories, num_edge_categories, num_steps
+        self, self_conditioning, num_node_categories, num_hyperedge_categories, num_incidence_categories, num_steps
     ):
         super().__init__()
         self.self_conditioning = self_conditioning
         self.num_node_categories = num_node_categories
-        self.num_edge_node_categories = num_edge_node_categories
-        self.num_edge_categories = num_edge_categories
+        self.num_hyperedge_categories = num_hyperedge_categories
+        self.num_incidence_categories = num_incidence_categories
         self.num_steps = num_steps
 
     def forward(
         self,
-        edge_index,
+        incidence_index,
         batch,
         node_type,
         node_attr,
-        edge_node_attr,
-        edge_attr,
+        hyperedge_attr,
+        incidence_attr,
         t,
         model,
         model_kwargs,
         node_attr_self_cond=None,
-        edge_node_attr_self_cond=None,
-        edge_attr_self_cond=None,
+        hyperedge_attr_self_cond=None,
+        incidence_attr_self_cond=None,
     ):
-        # embed node and edge attributes
+        # embed node, hyperedge and incidence attributes
         node_attr_in = F.one_hot(node_attr, self.num_node_categories).float() * 2 - 1
-        edge_node_attr_in = F.one_hot(node_attr, self.num_edge_node_categories).float() * 2 - 1
-        edge_attr_in = F.one_hot(edge_attr, self.num_edge_categories).float() * 2 - 1
+        hyperedge_attr_in = F.one_hot(hyperedge_attr, self.num_hyperedge_categories).float() * 2 - 1
+        incidence_attr_in = F.one_hot(incidence_attr, self.num_incidence_categories).float() * 2 - 1
 
         # self-conditioning
         if self.self_conditioning:
             if not model.training:
                 assert node_attr_self_cond is not None
-                assert edge_node_attr_self_cond is not None
-                assert edge_attr_self_cond is not None
+                assert hyperedge_attr_self_cond is not None
+                assert incidence_attr_self_cond is not None
                 node_attr_self_cond = th.softmax(node_attr_self_cond, dim=-1)
-                edge_node_attr_self_cond = th.softmax(edge_node_attr_self_cond, dim=-1)
-                edge_attr_self_cond = th.softmax(edge_attr_self_cond, dim=-1)
+                hyperedge_attr_self_cond = th.softmax(hyperedge_attr_self_cond, dim=-1)
+                incidence_attr_self_cond = th.softmax(incidence_attr_self_cond, dim=-1)
             elif np.random.rand() < 0.5:
                 # sample from next time step
                 t_next = th.clamp(t + 1, max=self.num_steps)
 
                 # compute self-conditioning
                 with th.no_grad():
-                    node_attr_self_cond, edge_node_attr_self_cond, edge_attr_self_cond = model(
-                        edge_index=edge_index,
+                    node_attr_self_cond, hyperedge_attr_self_cond, incidence_attr_self_cond = model(
+                        incidence_index=incidence_index,
                         batch=batch,
                         node_type=node_type,
                         node_attr=th.cat(
                             [node_attr_in, th.zeros_like(node_attr_in)], dim=-1
                         ),
-                        edge_node_attr=th.cat(
-                            [edge_node_attr_in, th.zeros_like(edge_node_attr_in)], dim=-1
+                        hyperedge_attr=th.cat(
+                            [hyperedge_attr_in, th.zeros_like(hyperedge_attr_in)], dim=-1
                         ),
-                        edge_attr=th.cat(
-                            [edge_attr_in, th.zeros_like(edge_attr_in)], dim=-1
+                        incidence_attr=th.cat(
+                            [incidence_attr_in, th.zeros_like(incidence_attr_in)], dim=-1
                         ),
                         **dict(
                             model_kwargs, noise_cond=t_next.float() / self.num_steps
@@ -74,41 +75,42 @@ class DiscreteGraphDiffusionModel(Module):
                         node_attr_self_cond.detach()
                         + F.one_hot(node_attr, self.num_node_categories).float()
                     )
-                    edge_node_attr_self_cond = (
-                        edge_node_attr_self_cond.detach()
-                        + F.one_hot(edge_node_attr, self.num_edge_node_categories).float()
+                    hyperedge_attr_self_cond = (
+                        hyperedge_attr_self_cond.detach()
+                        + F.one_hot(hyperedge_attr, self.num_hyperedge_categories).float()
                     )
-                    edge_attr_self_cond = (
-                        edge_attr_self_cond.detach()
-                        + F.one_hot(edge_attr, self.num_edge_categories).float()
+                    incidence_attr_self_cond = (
+                        incidence_attr_self_cond.detach()
+                        + F.one_hot(incidence_attr, self.num_incidence_categories).float()
                     )
                     node_attr_self_cond = th.softmax(node_attr_self_cond, dim=-1)
-                    edge_node_attr_self_cond = th.softmax(edge_node_attr_self_cond, dim=-1)
-                    edge_attr_self_cond = th.softmax(edge_attr_self_cond, dim=-1)
+                    hyperedge_attr_self_cond = th.softmax(hyperedge_attr_self_cond, dim=-1)
+                    incidence_attr_self_cond = th.softmax(incidence_attr_self_cond, dim=-1)
             else:
                 node_attr_self_cond = th.zeros_like(node_attr_in)
-                edge_node_attr_self_cond = th.zeros_like(edge_node_attr_in)
-                edge_attr_self_cond = th.zeros_like(edge_attr_in)
+                hyperedge_attr_self_cond = th.zeros_like(hyperedge_attr_in)
+                incidence_attr_self_cond = th.zeros_like(incidence_attr_in)
 
             # concatenate with input
             node_attr_in = th.cat([node_attr_in, node_attr_self_cond], dim=-1)
-            edge_node_attr_in = th.cat([edge_node_attr_in, edge_node_attr_self_cond], dim=-1)
-            edge_attr_in = th.cat([edge_attr_in, edge_attr_self_cond], dim=-1)
+            hyperedge_attr_in = th.cat([hyperedge_attr_in, hyperedge_attr_self_cond], dim=-1)
+            incidence_attr_in = th.cat([incidence_attr_in, incidence_attr_self_cond], dim=-1)
 
-        # predict node and edge attributes
-        node_pred, edge_node_pred, edge_pred = model(
-            edge_index=edge_index,
+        # predict node and incidence attributes
+        node_pred, hyperedge_pred, incidence_pred = model(
+            incidence_index=incidence_index,
             batch=batch,
+            node_type=node_type,
             node_attr=node_attr_in,
-            edge_node_attr=edge_node_attr_in,
-            edge_attr=edge_attr_in,
+            hyperedge_attr=hyperedge_attr_in,
+            incidence_attr=incidence_attr_in,
             **dict(model_kwargs, noise_cond=t.float() / self.num_steps),
         )
         node_pred = node_pred + F.one_hot(node_attr, self.num_node_categories).float()
-        edge_node_pred = edge_node_pred + F.one_hot(edge_node_attr, self.num_edge_node_categories).float()
-        edge_pred = edge_pred + F.one_hot(edge_attr, self.num_edge_categories).float()
+        hyperedge_pred = hyperedge_pred + F.one_hot(hyperedge_attr, self.num_hyperedge_categories).float()
+        incidence_pred = incidence_pred + F.one_hot(incidence_attr, self.num_incidence_categories).float()
 
-        return node_pred, edge_node_pred, edge_pred
+        return node_pred, hyperedge_pred, incidence_pred
 
 
 class DiscreteGraphDiffusion:
@@ -116,12 +118,12 @@ class DiscreteGraphDiffusion:
         super().__init__()
 
         self.model_wrapper = DiscreteGraphDiffusionModel(
-            self_conditioning, 2, 2, num_steps
+            self_conditioning, 2, 3, 2, num_steps
         )
         self.num_steps = num_steps
         self.node_diffusion = CategoricalDiffusion(2, num_steps)
-        self.edge_node_diffusion = CategoricalDiffusion(3, num_steps)
-        self.edge_diffusion = CategoricalDiffusion(2, num_steps)
+        self.hyperedge_diffusion = CategoricalDiffusion(3, num_steps)
+        self.incidence_diffusion = CategoricalDiffusion(2, num_steps)
 
     @property
     def device(self):
@@ -132,100 +134,104 @@ class DiscreteGraphDiffusion:
         self._device = device
         self.model_wrapper.to(device)
         self.node_diffusion.to(device)
-        self.edge_node_diffusion.to(device)
-        self.edge_diffusion.to(device)
+        self.hyperedge_diffusion.to(device)
+        self.incidence_diffusion.to(device)
         return self
 
     @th.no_grad()
-    def sample(self, edge_index, batch, num_nodes, model, model_kwargs):
+    def sample(self, incidence_index, node_type, batch, model, model_kwargs):
         """Generate samples using the model.
 
         Iteratively sample from p(x_{t-1} | x_t) for t = T-1, ..., 0, starting from x_T ~ p(x_T).
         """
+        num_nodes = scatter(node_type, batch)
+        
         # sample from p(x_T)
         node_attr_t = sample_categorical(self.node_diffusion.qT, num_nodes.sum())
-        edge_node_attr_t = sample_categorical(self.edge_node_diffusion.qT, batch.size(0) - num_nodes.sum())
-        edge_triu_mask = edge_index[0] < edge_index[1]
-        edge_triu_index = edge_index[:, edge_triu_mask]
-        edge_attr_t = sample_categorical(
-            self.edge_diffusion.qT, edge_triu_index.size(1)
+        hyperedge_attr_t = sample_categorical(self.hyperedge_diffusion.qT, batch.size(0) - num_nodes.sum())
+        incidence_triu_mask = incidence_index[0] < incidence_index[1]
+        incidence_triu_index = incidence_index[:, incidence_triu_mask]
+        incidence_attr_t = sample_categorical(
+            self.incidence_diffusion.qT, incidence_triu_index.size(1)
         )
-        edge_attr_t = to_undirected(edge_triu_index, edge_attr_t)[1]
+        incidence_attr_t = to_undirected(incidence_triu_index, incidence_attr_t)[1]
 
         node_pred = th.zeros(num_nodes.sum(), 2, device=self.device)
-        edge_node_pred = th.zeros(batch.size(0) - num_nodes.sum(), 3, device=self.device)
-        edge_pred = th.zeros(edge_index.size(1), 2, device=self.device)
+        hyperedge_pred = th.zeros(batch.size(0) - num_nodes.sum(), 3, device=self.device)
+        incidence_pred = th.zeros(incidence_index.size(1), 2, device=self.device)
 
         bs = batch.max().item() + 1
         # sample from p(x_{t-1} | x_t) for t = T-1, ..., 0
         for timestep in reversed(range(self.num_steps)):
             t = timestep * th.ones(bs, dtype=th.long, device=self.device)
 
-            # predict node and edge attributes
-            node_pred, edge_pred = self.model_wrapper(
-                edge_index=edge_index,
+            # predict node and incidence attributes
+            node_pred, hyperedge_pred, incidence_pred = self.model_wrapper(
+                incidence_index=incidence_index,
                 batch=batch,
+                node_type=node_type,
                 node_attr=node_attr_t,
-                edge_node_attr=edge_node_attr_t,
-                edge_attr=edge_attr_t,
+                hyperedge_attr=hyperedge_attr_t,
+                incidence_attr=incidence_attr_t,
                 t=t,
                 model=model,
                 model_kwargs=model_kwargs,
                 node_attr_self_cond=node_pred,
-                edge_attr_self_cond=edge_pred,
+                hyperedge_attr_self_cond=hyperedge_pred,
+                incidence_attr_self_cond=incidence_pred,
             )
 
-            # sample ancestor node and edge attributes
+            # sample ancestor node and incidence attributes
             node_attr_t = self.node_diffusion.q_reverse_sample(
-                node_attr_t, node_attr_t, node_pred, batch, t
+                node_attr_t, node_pred, batch[node_type==1], t
             )
             
-            edge_node_attr_t = self.edge_node_diffusion.q_reverse_sample(
-                edge_node_attr_t, edge_node_attr_t, edge_node_pred, batch, t
+            hyperedge_attr_t = self.hyperedge_diffusion.q_reverse_sample(
+                hyperedge_attr_t, hyperedge_pred, batch[node_type==0], t
             )
 
-            edge_attr_t = self.edge_diffusion.q_reverse_sample(
-                edge_attr_t[edge_triu_mask],
-                edge_pred[edge_triu_mask],
-                batch[edge_triu_index[0]],
+            incidence_attr_t = self.incidence_diffusion.q_reverse_sample(
+                incidence_attr_t[incidence_triu_mask],
+                incidence_pred[incidence_triu_mask],
+                batch[incidence_triu_index[0]],
                 t,
             )
-            edge_attr_t = to_undirected(edge_triu_index, edge_attr_t)[1]
+            incidence_attr_t = to_undirected(incidence_triu_index, incidence_attr_t)[1]
 
         # return probabilities for positive class
         node_out = F.softmax(node_pred, dim=-1)[:, 1]
-        edge_node_out = F.softmax(edge_node_pred, dim=-1)[:, 1]
-        edge_out = F.softmax(edge_pred, dim=-1)[:, 1]
-        return node_out, edge_node_out, edge_out
+        hyperedge_out = F.softmax(hyperedge_pred, dim=-1)[:, 1]
+        incidence_out = F.softmax(incidence_pred, dim=-1)[:, 1]
+        return node_out, hyperedge_out, incidence_out
 
-    def get_loss(self, edge_index, batch, node_type, node_attr, edge_node_attr, edge_attr, model, model_kwargs):
+    def get_loss(self, incidence_index, batch, node_type, node_attr, hyperedge_attr, incidence_attr, model, model_kwargs):
         """Compute loss to train the model.
 
         Sample x_pred ~ p(x_t, t), where t ~ U(0, T-1) and x_t ~ q(x_t | x),
         and compute the cross entropy loss between x_pred and x.
         """
-        # sample noisy augmented node and edge attributes
+        # sample noisy augmented node and incidence attributes
         t = th.randint(0, self.num_steps, (batch.max().item() + 1,), device=self.device)
-        node_attr_t = self.node_diffusion.q_sample(node_attr, batch, t)
-        edge_node_attr_t = self.edge_node_diffusion.q_sample(edge_node_attr, batch, t)
-        edge_triu_mask = edge_index[0] < edge_index[1]
-        edge_triu_index = edge_index[:, edge_triu_mask]
-        edge_triu_attr = edge_attr[edge_triu_mask]
-        edge_triu_batch = batch[edge_index[0, edge_triu_mask]]
-        edge_triu_attr_t = self.edge_diffusion.q_sample(
-            edge_triu_attr, edge_triu_batch, t
+        node_attr_t = self.node_diffusion.q_sample(node_attr, batch[node_type==1], t)
+        hyperedge_attr_t = self.hyperedge_diffusion.q_sample(hyperedge_attr, batch[node_type==0], t)
+        incidence_triu_mask = incidence_index[0] < incidence_index[1]
+        incidence_triu_index = incidence_index[:, incidence_triu_mask]
+        incidence_triu_attr = incidence_attr[incidence_triu_mask]
+        incidence_triu_batch = batch[incidence_index[0, incidence_triu_mask]]
+        incidence_triu_attr_t = self.incidence_diffusion.q_sample(
+            incidence_triu_attr, incidence_triu_batch, t
         )
-        new_edge_index, edge_attr_t = to_undirected(edge_triu_index, edge_triu_attr_t)
-        assert (new_edge_index == edge_index).all()
+        new_incidence_index, incidence_attr_t = to_undirected(incidence_triu_index, incidence_triu_attr_t)
+        assert (new_incidence_index == incidence_index).all()
 
         # predict
-        node_pred, edge_node_pred, edge_pred = self.model_wrapper(
-            edge_index=edge_index,
+        node_pred, hyperedge_pred, incidence_pred = self.model_wrapper(
+            incidence_index=incidence_index,
             batch=batch,
             node_type=node_type,
             node_attr=node_attr_t,
-            edge_node_attr=edge_node_attr_t,
-            edge_attr=edge_attr_t,
+            hyperedge_attr=hyperedge_attr_t,
+            incidence_attr=incidence_attr_t,
             t=t,
             model=model,
             model_kwargs=model_kwargs,
@@ -233,10 +239,10 @@ class DiscreteGraphDiffusion:
 
         # compute loss
         node_loss = self.node_diffusion.get_loss(node_attr, node_pred)
-        edge_node_loss = self.edge_node_diffusion.get_loss(edge_node_attr, edge_node_pred)
-        edge_loss = self.edge_diffusion.get_loss(edge_attr, edge_pred)
+        hyperedge_loss = self.hyperedge_diffusion.get_loss(hyperedge_attr, hyperedge_pred)
+        incidence_loss = self.incidence_diffusion.get_loss(incidence_attr, incidence_pred)
 
-        return node_loss + edge_node_loss, edge_loss
+        return node_loss, hyperedge_loss, incidence_loss
 
 
 class CategoricalDiffusion(Module):
@@ -294,11 +300,11 @@ class CategoricalDiffusion(Module):
         return F.cross_entropy(pred, x, reduction="none")
 
 
-def to_undirected(edge_index, edge_attr) -> tuple[th.Tensor, th.Tensor]:
-    """Convert directed edges to undirected edges."""
-    edge_index = th.cat([edge_index, edge_index.flip(0)], dim=1)
-    edge_attr = th.cat([edge_attr, edge_attr], dim=0)
-    return sort_edge_index(edge_index, edge_attr)
+def to_undirected(incidence_index, incidence_attr) -> tuple[th.Tensor, th.Tensor]:
+    """Convert directed incidences to undirected incidences."""
+    incidence_index = th.cat([incidence_index, incidence_index.flip(0)], dim=1)
+    incidence_attr = th.cat([incidence_attr, incidence_attr], dim=0)
+    return sort_edge_index(incidence_index, incidence_attr)
 
 
 def sample_categorical(probs, num_samples):

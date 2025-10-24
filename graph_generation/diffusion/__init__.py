@@ -1,1 +1,1 @@
-from . import dense, sparse
+from . import sparse

@@ -16,7 +16,7 @@ validation:
   batch_size: 2
 
 spectral:
-  num_features: 2
+  num_eigenvectors: 2
 
 model:
   name: ppgn

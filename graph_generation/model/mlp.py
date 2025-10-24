@@ -6,33 +6,33 @@ class MLP(Module):
     """This block implements the multi-layer perceptron (MLP) module.
 
     Args:
-        in_features (int): Number of features of the input.
-        hidden_features (list[int]): List of the hidden features dimensions.
-        out_features (int, optional): If not `None` a projection layer is added at the end of the MLP. Defaults to `None`.
+        in_dim (int): Number of features of the input.
+        hidden_dim (list[int]): List of the hidden features dimensions.
+        out_dim (int, optional): If not `None` a projection layer is added at the end of the MLP. Defaults to `None`.
         bias (bool, optional): Whether to use bias in the linear layers. Defaults to `True`.
         norm_layer (Module, optional): Normalization layer to use. Defaults to `norm_layer`.
     """
 
     def __init__(
         self,
-        in_features: int,
-        hidden_features: list[int],
-        out_features: int | None = None,
+        in_dim: int,
+        hidden_dim: list[int],
+        out_dim: int | None = None,
         bias: bool = True,
         norm_layer=LayerNorm,
     ):
         super().__init__()
         lin_layers = []
         norm_layers = []
-        hidden_in_features = in_features
-        for hidden_dim in hidden_features:
-            lin_layers.append(Linear(hidden_in_features, hidden_dim, bias=bias))
+        hidden_in_dim = in_dim
+        for hidden_dim in hidden_dim:
+            lin_layers.append(Linear(hidden_in_dim, hidden_dim, bias=bias))
             norm_layers.append(norm_layer(hidden_dim))
-            hidden_in_features = hidden_dim
+            hidden_in_dim = hidden_dim
 
         self.out_layer = (
-            Linear(hidden_in_features, out_features, bias=bias)
-            if out_features is not None
+            Linear(hidden_in_dim, out_dim, bias=bias)
+            if out_dim is not None
             else None
         )
 
