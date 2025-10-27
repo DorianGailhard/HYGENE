@@ -58,17 +58,29 @@ class EMA1(Module):
     def __init__(self, model):
         super().__init__()
         self._model = [model]  # hack to not register model as submodule
+        self.ema_model = copy.deepcopy(model)
+        self.ema_model.requires_grad_(False)
+        self.ema_model.eval()
+        self.eval()
+
+        self.train_param_names = [
+            name for name, param in self.model.named_parameters() if param.requires_grad
+        ]
 
     @property
     def model(self):
         return self._model[0]
 
     def update(self, step):
-        pass
+        for (name, param), (ema_name, ema_param) in zip(
+            self.model.named_parameters(), self.ema_model.named_parameters()
+        ):
+            assert name == ema_name
+            if name not in self.train_param_names:
+                continue
+            
+            ema_param.data.copy_(param.data)
+            assert ema_param.requires_grad == False
 
     def forward(self, *args, **kwargs):
-        training_mode = self.model.training
-        self.model.eval()
-        res = self.model(*args, **kwargs)
-        self.model.train(training_mode)
-        return res
+        return self.ema_model(*args, **kwargs)
