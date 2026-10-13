@@ -200,7 +200,8 @@ class DiscreteGraphDiffusion:
 
         # return probabilities for positive class
         node_out = F.softmax(node_pred, dim=-1)[:, 1]
-        hyperedge_out = F.softmax(hyperedge_pred, dim=-1)[:, 1]
+        hyperedge_probs = F.softmax(hyperedge_pred, dim=-1)
+        hyperedge_out = hyperedge_probs[:, 1] + 2 * hyperedge_probs[:, 2]
         incidence_out = F.softmax(incidence_pred, dim=-1)[:, 1]
         return node_out, hyperedge_out, incidence_out
 

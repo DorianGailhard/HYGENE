@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - dataset: hypergraphErdosRenyi
-  - diffusion: discrete
+  - diffusion: edm
   - method: expansion
 
 dataset:
